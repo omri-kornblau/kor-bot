@@ -4,7 +4,7 @@
 #include <RoboClaw.h>
 #include <EEPROM.h>
 
-#define Telemetry 1
+#define Telemetry 0
 #define calib_gyro 0
 #define alpha_gyro 0.995      // takes most of the angle from gyro .. very little noise to acc
 
@@ -31,6 +31,7 @@
 
 #define alpha_avg_vel 0.9       // avergaring factor for the averaged velocity 
 #define alpha_avg_dError 0.9    // avergaring factor for the averaged derivative of the error 
+#define alpha_stick 0.9
 
 #define address 0x80            // adress of the roboclaw 128
 #define click_in_meter 47609    // encoder clics in one meter
@@ -201,8 +202,8 @@ void loop() {
   last_cycle = millis();
 
   RemoteXY_Handler (); 
-  wanted_velocity = float(RemoteXY.joystick_1_y)/200;
-  wanted_rotation = float(RemoteXY.joystick_1_x)/400;
+  wanted_velocity = alpha_stick*wanted_velocity + (1-alpha_stick)* float(RemoteXY.joystick_1_y)/200;
+  wanted_rotation = alpha_stick*wanted_rotation + (1-alpha_stick)* float(RemoteXY.joystick_1_x)/400;
   motion_enable = RemoteXY.switch_1;
   prev_standing = standing;
   if (abs(wanted_velocity)<=0.01) standing=1; else standing=0;
@@ -253,7 +254,8 @@ void loop() {
   
   wanted_velocity_m_s = wanted_velocity_m_s + wanted_acc_m_ss * deltaT + KP_vel_to_vel * (average_vel - wanted_velocity);
   wanted_velocity_m_s = constrainF (wanted_velocity_m_s, -max_velocity,max_velocity);
-
+  if (motion_enable ==0) wanted_velocity_m_s=0;
+  
   set_motors_vel (wanted_velocity_m_s, wanted_rotation);
   send_telemetry();
 }
@@ -464,14 +466,14 @@ void send_telemetry(){
 //    Serial.print(" pit "); Serial.print(pitch_rad);
 //    Serial.print(" pit_v "); Serial.print(pitch_vel_rad_sec);
 //    Serial.print(" wv "); Serial.print(wanted_velocity_m_s);
-// Serial.print(" CT "); Serial.print(deltaT);
-// Serial.print(" dd "); Serial.print(ddError);
-// Serial.print(" int "); Serial.print(1000*integral);
-Serial.print(" wa "); Serial.print(57295*wanted_angle);
- Serial.print(" ac "); Serial.print(57295*actual_angle);
-//Serial.print(" avgdE "); Serial.print(1000*average_dError);
-//Serial.print(" posEI "); Serial.print(1000*pos_error_integral);
-//Serial.print(" velEI "); Serial.print(1000*vel_error_integral);
+//    Serial.print(" CT "); Serial.print(deltaT);
+//    Serial.print(" dd "); Serial.print(ddError);
+//    Serial.print(" int "); Serial.print(1000*integral);
+//    Serial.print(" wa "); Serial.print(57295*wanted_angle);
+//    Serial.print(" ac "); Serial.print(57295*actual_angle);
+//    Serial.print(" avgdE "); Serial.print(1000*average_dError);
+//    Serial.print(" posEI "); Serial.print(1000*pos_error_integral);
+//    Serial.print(" velEI "); Serial.print(1000*vel_error_integral);
     Serial.println("");
   }
 }
