@@ -47,17 +47,11 @@ unsigned long last_read_time;
 float last_x_angle;
 float last_y_angle;
 float last_z_angle;
-float last_gyro_x_angle;
-float last_gyro_y_angle;
-float last_gyro_z_angle;
 
 inline unsigned long get_last_time() {return last_read_time;}
 inline float get_last_x_angle() {return last_x_angle;}
 inline float get_last_y_angle() {return last_y_angle;}
 inline float get_last_z_angle() {return last_z_angle;}
-inline float get_last_gyro_x_angle() {return last_gyro_x_angle;}
-inline float get_last_gyro_y_angle() {return last_gyro_y_angle;}
-inline float get_last_gyro_z_angle() {return last_gyro_z_angle;}
 
 float    base_x_accel;
 float    base_y_accel;
@@ -66,14 +60,11 @@ float    base_x_gyro;
 float    base_y_gyro;
 float    base_z_gyro;
 
-void set_last_read_angle_data(unsigned long time, float x, float y, float z, float x_gyro, float y_gyro, float z_gyro) {
+void set_last_read_angle_data(unsigned long time, float x, float y, float z) {
   last_read_time = time;
   last_x_angle = x;
   last_y_angle = y;
   last_z_angle = z;
-  last_gyro_x_angle = x_gyro;
-  last_gyro_y_angle = y_gyro;
-  last_gyro_z_angle = z_gyro;
 }
 
 int read_gyro_accel_vals(uint8_t* accel_t_gyro_ptr) {
@@ -117,7 +108,7 @@ void calibrate_sensors() {
     x_gyro += accel_t_gyro.value.x_gyro;
     y_gyro += accel_t_gyro.value.y_gyro;
     z_gyro += accel_t_gyro.value.z_gyro;
-    delay(100);
+    delay(20);
   }
 
   x_accel /= num_readings;
@@ -137,7 +128,7 @@ void calibrate_sensors() {
 
 void setup()
 {
-  Serial.begin(19200);
+  Serial.begin(115200);
   Wire.begin();
 
   // Clear the 'sleep' bit to start the sensor.
@@ -145,13 +136,13 @@ void setup()
 
   // The sensor should be motionless on a horizontal surface
   calibrate_sensors();
-  set_last_read_angle_data(millis(), 0, 0, 0, 0, 0, 0);
+  set_last_read_angle_data(millis(), 0, 0, 0);
 }
 
 orientation get_orientation() {
   accel_t_gyro_union accel_t_gyro;
 
-  error = read_gyro_accel_vals((uint8_t*) &accel_t_gyro);
+  int error = read_gyro_accel_vals((uint8_t*) &accel_t_gyro);
 
   unsigned long t_now = millis();
 
@@ -180,24 +171,19 @@ orientation get_orientation() {
   float gyro_angle_y = gyro_y*dt + get_last_y_angle();
   float gyro_angle_z = gyro_z*dt + get_last_z_angle();
 
-  // Compute the drifting gyro angles
-  float unfiltered_gyro_angle_x = gyro_x*dt + get_last_gyro_x_angle();
-  float unfiltered_gyro_angle_y = gyro_y*dt + get_last_gyro_y_angle();
-  float unfiltered_gyro_angle_z = gyro_z*dt + get_last_gyro_z_angle();
-
   float alpha = 0.96;
   float angle_x = alpha*gyro_angle_x + (1.0 - alpha)*accel_angle_x;
   float angle_y = alpha*gyro_angle_y + (1.0 - alpha)*accel_angle_y;
   float angle_z = gyro_angle_z;  //Accelerometer doesn't give z-angle
 
   // Update the saved data with the latest values
-  set_last_read_angle_data(t_now, angle_x, angle_y, angle_z, unfiltered_gyro_angle_x, unfiltered_gyro_angle_y, unfiltered_gyro_angle_z);
+  set_last_read_angle_data(t_now, angle_x, angle_y, angle_z);
 
   return {
     angle_x,
     angle_y,
     angle_z
-  }
+  };
 }
 
 void loop()
@@ -210,9 +196,9 @@ void loop()
   Serial.print(a.pitch);
   Serial.print(", ");
   Serial.print(a.roll);
-  Serial.print(", ");
+  Serial.println(", ");
   // Delay so we don't swamp the serial port
-  delay(5);
+  delay(20);
 }
 
 int MPU6050_read(int start, uint8_t *buffer, int size)
