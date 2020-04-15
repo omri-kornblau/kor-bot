@@ -6,28 +6,27 @@
 
 #define Telemetry 0
 #define calib_gyro 0
-#define alpha_gyro 0.995      // takes most of the angle from gyro .. very little noise to acc
+#define alpha_gyro 0.995         // takes most of the angle from gyro .. very little noise to acc
 
-#define prediction_time 0.0
-#define KDD_Angle_to_acc 0.65 //  0.65
-#define KD_Angle_to_acc 0.7   //  0.7 
-#define KP_Angle_to_acc 18     //  18
-#define KI_Angle_to_acc 10    //  10
-#define KI_Angle_to_acc_res 80    //  80 integral that resets when error change dir
-#define KP_vel_to_vel   0.18  //  0.18      adds to the velocity a factor of average velocity - do damp it down
-#define KD_avgdError_to_acc 50 // 100      slows the robot when closing the error fast - like KD , but on average D to eliminate noise 
+#define KDD_Angle_to_acc 0.4     //  0.4
+#define KD_Angle_to_acc 2        //  2 
+#define KP_Angle_to_acc 6        //  6
+#define KI_Angle_to_acc 3        //  3
+#define KI_Angle_to_acc_res 5    //  5        integral that resets when error change dir
+#define KP_vel_to_vel   0.015    //  0.015    adds to the velocity a factor of average velocity - do damp it down
+#define KD_avgdError_to_acc 15   //  15       slows the robot when closing the error fast - like KD , but on average D to eliminate noise 
 
 #define integral_limit 0.035
 
-#define KP_pos_to_angle 0.01   // 0.01 to keep 0
-#define KI_pos_to_angle 0.01   // 0.01 to keep 0
-#define pos_error_integral_limit 0.3
+#define KP_pos_to_angle  0.04          // 0.04 to keep 0
+#define KI_pos_to_angle  0.02          // 0.02 to keep 0
+#define pos_error_integral_limit 0.3   // 0.3
+ 
+#define KP_vel_to_angle  0.08          // 0.08
+#define KI_vel_to_angle  0.02          // 0.02
+#define vel_error_integral_limit 0.3   // 0.3
 
-#define KP_vel_to_angle 0.01
-#define KI_vel_to_angle 0.01
-#define vel_error_integral_limit 0.3
-
-#define Gyro_bias 5 // deg
+#define Gyro_bias 4.1             // deg   lower = move forward
 
 #define alpha_avg_vel 0.9       // avergaring factor for the averaged velocity 
 #define alpha_avg_dError 0.9    // avergaring factor for the averaged derivative of the error 
@@ -36,6 +35,12 @@
 #define address 0x80            // adress of the roboclaw 128
 #define click_in_meter 47609    // encoder clics in one meter
 #define max_velocity 3
+
+#define PIN_SW1 3
+#define PIN_SW2 4
+#define PIN_LED1 5
+#define PIN_LED2 6
+
 
 #define RADIANS_TO_DEGREES 57.29578
 #define MPU6050_ACCEL_XOUT_H 0x3B // R
@@ -61,10 +66,13 @@
 // RemoteXY configurate  
 #pragma pack(push, 1)
 uint8_t RemoteXY_CONF[] =
-  { 255,3,0,0,0,26,0,10,24,1,
-  5,32,11,42,42,42,177,26,31,2,
-  0,38,90,24,9,177,26,8,1,79,
-  78,0,0 };
+  { 255,3,0,8,0,61,0,10,24,1,
+  5,32,8,41,48,48,177,26,31,2,
+  0,43,91,20,9,177,26,8,1,79,
+  78,0,0,68,34,-1,-2,64,34,186,
+  50,137,87,97,110,116,101,100,32,40,
+  68,101,103,41,0,65,99,116,117,97,
+  108,32,40,68,101,103,41,0 };
   
 // this structure defines all the variables and events of your control interface 
 struct {
@@ -73,6 +81,10 @@ struct {
   int8_t joystick_1_x; // =-100..100 x-coordinate joystick position 
   int8_t joystick_1_y; // =-100..100 y-coordinate joystick position 
   uint8_t switch_1; // =1 if switch ON and =0 if OFF 
+
+    // output variables
+  float onlineGraph_1_var1;
+  float onlineGraph_1_var2;
 
     // other variable
   uint8_t connect_flag;  // =1 if wire connected, else =0 
@@ -83,6 +95,7 @@ struct {
 /////////////////////////////////////////////
 //           END RemoteXY include          //
 /////////////////////////////////////////////
+
 
 
 MPU6050 mpu;
@@ -152,10 +165,9 @@ void set_last_read_angle_data(unsigned long time, float x, float y, float z) {
   last_z_angle = z;
 }
 
-unsigned long last_time,last_sent,last_cycle;
+unsigned long last_time,last_sent,last_cycle, lastUSRblink;
 float wanted_angle = 0, prev_wanted_angle;
 float pitch_rad,pitch_vel_rad_sec = 0;
-float actual_angle = 0;
 float wanted_velocity_m_s = 0;
 float wanted_acc_m_ss = 0;
 
@@ -165,22 +177,28 @@ int32_t enc1;
 int32_t enc2;
 int32_t speed1;
 int32_t speed2;
-float average_vel, average_dError;
+float average_robot_vel_m_s, average_dError;
 float robot_vel_m_sec;
 float robot_pos_m;
 float base_acc, error,prev_error, dError,prev_dError, ddError, integral, integral_res;
 float pos_error,prev_pos_error,pos_error_integral;
 float vel_error,prev_vel_error,vel_error_integral;
-
 float deltaT, velocity1, velocity2;
-
 float wanted_velocity = 0;
 float wanted_rotation = 0;
 float wanted_position = 0;
-byte motion_enable = 0;
-byte standing = 1, prev_standing;
+uint8_t motion_enable = 0 , reset_encoders_when_stand = 0;
+uint8_t want_to_stand = 1, prev_want_to_stand;
+uint8_t SW1, prev_SW1, counter_SW1_ON, counter_SW1_OFF, SW1_pressed, SW1temp;
+uint8_t SW2, prev_SW2, counter_SW2_ON, counter_SW2_OFF, SW2_pressed, SW2temp;
+uint8_t SW1_motion_enable, main_LED; 
 
 void setup() {
+    pinMode (PIN_SW1,INPUT_PULLUP);
+    pinMode (PIN_SW2,INPUT_PULLUP);
+    pinMode (PIN_LED1,OUTPUT);
+    pinMode (PIN_LED2,OUTPUT);
+
     RemoteXY_Init (); 
     Wire.begin();
     Serial.begin(115200);
@@ -198,42 +216,37 @@ void setup() {
 
 
 void loop() {
-  while (millis()-last_cycle<10) {}
-  last_cycle = millis();
+  // Serial.println (millis()-last_cycle);
+  while (millis()-last_cycle<10) {}  last_cycle = millis();
+  deal_with_standing  ();
+  get_pitch_and_vel   ();
+  read_robot_vel_pos  ();
+  calc_pos_vel_errors ();
+  calc_PID_errors     ();
+  calc_wanted_velocity();
+  send_motors_commands(wanted_velocity_m_s, wanted_rotation);
+  RemoteXY_Handler    ();      // read from bluetooth 
+  get_user_commands   ();
+  control_LEDs ();
 
-  RemoteXY_Handler (); 
-  wanted_velocity = alpha_stick*wanted_velocity + (1-alpha_stick)* float(RemoteXY.joystick_1_y)/200;
-  wanted_rotation = alpha_stick*wanted_rotation + (1-alpha_stick)* float(RemoteXY.joystick_1_x)/400;
-  motion_enable = RemoteXY.switch_1;
-  prev_standing = standing;
-  if (abs(wanted_velocity)<=0.01) standing=1; else standing=0;
-  if (standing ==1 && prev_standing==0){
-    roboclaw.SetEncM1(address,0);
-    roboclaw.SetEncM2(address,0);
-  }
-  
-  orientation a = get_orientation();
-  pitch_vel_rad_sec = a.pitch_vel / RADIANS_TO_DEGREES;
-  pitch_rad = (a.pitch + Gyro_bias) / RADIANS_TO_DEGREES;
-  
-  actual_angle = pitch_rad  + pitch_vel_rad_sec * prediction_time;
- 
-  read_vel_pos();
-  calc_pos_vel_errors();
-  average_vel = alpha_avg_vel* average_vel + (1-alpha_avg_vel)*robot_vel_m_sec;
-    
+  send_telemetry();
+  RemoteXY.onlineGraph_1_var1 = wanted_angle * RADIANS_TO_DEGREES;
+  RemoteXY.onlineGraph_1_var2 = pitch_rad * RADIANS_TO_DEGREES;
+}
+
+void  calc_PID_errors (){
+  deltaT = float ((millis() - last_time))/1000;    last_time = millis();
+
+  prev_error = error;
+  prev_dError = dError;
   prev_wanted_angle = wanted_angle;  
+
   wanted_angle = KP_vel_to_angle * vel_error +  KI_vel_to_angle * vel_error_integral;
-  if (standing == 1) {
+  if (want_to_stand == 1 && reset_encoders_when_stand == 0) {    // keep pos only after swant to stand and encoders were reset
     wanted_angle  += KP_pos_to_angle * pos_error +  KI_pos_to_angle * pos_error_integral;
   }
   
-  deltaT = float ((millis() - last_time))/1000;    last_time = millis();
-  
-  prev_error = error;
-  prev_dError = dError;
-  
-  error = actual_angle - wanted_angle;
+  error = pitch_rad - wanted_angle;
 
   integral += error * deltaT;
   integral = constrainF (integral,-integral_limit,integral_limit); 
@@ -247,17 +260,75 @@ void loop() {
   average_dError = alpha_avg_dError * average_dError + (1-alpha_avg_dError) * dError;
   
   ddError = (dError - prev_dError) / deltaT;  
-  
-  base_acc = 9.8 * tan(actual_angle);
+}
+
+void calc_wanted_velocity (){
+  base_acc = 9.8 * tan(pitch_rad);
   wanted_acc_m_ss = base_acc + KP_Angle_to_acc * error + KI_Angle_to_acc * integral + KD_Angle_to_acc * dError + KDD_Angle_to_acc * ddError + KI_Angle_to_acc_res*integral_res;
   wanted_acc_m_ss += KD_avgdError_to_acc * average_dError;
   
-  wanted_velocity_m_s = wanted_velocity_m_s + wanted_acc_m_ss * deltaT + KP_vel_to_vel * (average_vel - wanted_velocity);
+  wanted_velocity_m_s = wanted_velocity_m_s + wanted_acc_m_ss * deltaT + KP_vel_to_vel * (average_robot_vel_m_s - wanted_velocity);
   wanted_velocity_m_s = constrainF (wanted_velocity_m_s, -max_velocity,max_velocity);
   if (motion_enable ==0) wanted_velocity_m_s=0;
-  
-  set_motors_vel (wanted_velocity_m_s, wanted_rotation);
-  send_telemetry();
+}
+
+void deal_with_standing () {
+  prev_want_to_stand = want_to_stand;
+  if (abs(wanted_velocity)<=0.01) want_to_stand=1; else want_to_stand=0;
+  if (want_to_stand ==1 && prev_want_to_stand==0)reset_encoders_when_stand = 1;
+  if (reset_encoders_when_stand == 1 && abs(robot_vel_m_sec)<0.02 ) { 
+      roboclaw.SetEncM1(address,0);
+      roboclaw.SetEncM2(address,0);
+      reset_encoders_when_stand = 0;
+  }
+}
+
+void get_user_commands () {
+  wanted_velocity = alpha_stick*wanted_velocity + (1-alpha_stick)* float(RemoteXY.joystick_1_y)/50;
+  wanted_rotation = alpha_stick*wanted_rotation + (1-alpha_stick)* float(RemoteXY.joystick_1_x)/200;
+  motion_enable = (RemoteXY.switch_1 || SW1_motion_enable);
+
+  prev_SW1 = SW1; 
+  SW1temp = (1-digitalRead (PIN_SW1));
+  if (SW1temp==1) {counter_SW1_ON +=1;   if (counter_SW1_ON  >10) {SW1=1; counter_SW1_ON  = 11; }} else counter_SW1_ON  = 0;
+  if (SW1temp==0) {counter_SW1_OFF+=1;   if (counter_SW1_OFF >10) {SW1=0; counter_SW1_OFF = 11; }} else counter_SW1_OFF = 0;
+  if (SW1==0 && prev_SW1==1) SW1_pressed=1;  else SW1_pressed=0;
+
+  prev_SW2 = SW2; 
+  SW2temp = (1-digitalRead (PIN_SW2));
+  if (SW2temp==1) {counter_SW2_ON +=1;   if (counter_SW2_ON  >10) {SW2=1; counter_SW2_ON  = 11; }} else counter_SW2_ON  = 0;
+  if (SW2temp==0) {counter_SW2_OFF+=1;   if (counter_SW2_OFF >10) {SW2=0; counter_SW2_OFF = 11; }} else counter_SW2_OFF = 0;
+  if (SW2==0 && prev_SW2==1) SW2_pressed=1;  else SW2_pressed=0;
+
+  if (SW1_pressed) SW1_motion_enable = 1-SW1_motion_enable;
+}
+
+void control_LEDs ()
+{
+    if (main_LED)
+    {
+      if (millis()-lastUSRblink >10 + 380*motion_enable)
+      {
+        main_LED=0;
+        lastUSRblink=millis();
+        digitalWrite (PIN_LED1, 0); 
+      }
+    }
+    else
+    {
+      if (millis()-lastUSRblink>390 - 370*motion_enable)
+      {
+        main_LED=1;
+        lastUSRblink=millis();
+        digitalWrite (PIN_LED1, 1); 
+      }
+    }
+}
+
+void get_pitch_and_vel () { 
+  orientation a = get_orientation();
+  pitch_vel_rad_sec = a.pitch_vel / RADIANS_TO_DEGREES;
+  pitch_rad = (a.pitch + Gyro_bias) / RADIANS_TO_DEGREES;
 }
 
 void calc_pos_vel_errors(){
@@ -265,10 +336,10 @@ void calc_pos_vel_errors(){
   pos_error = wanted_position - robot_pos_m;
   pos_error_integral += pos_error * deltaT;
   pos_error_integral = constrainF (pos_error_integral,-pos_error_integral_limit,pos_error_integral_limit); 
-  if (standing == 0 || motion_enable == 0) pos_error_integral = 0;
-  
+  if (want_to_stand == 0 || motion_enable == 0 || reset_encoders_when_stand==1) pos_error_integral = 0;
+
   prev_vel_error = vel_error;
-  vel_error = wanted_velocity - average_vel;
+  vel_error = wanted_velocity - average_robot_vel_m_s;
   vel_error_integral += vel_error * deltaT;
   vel_error_integral = constrainF (vel_error_integral,-vel_error_integral_limit,vel_error_integral_limit); 
   if (motion_enable ==0)  vel_error_integral = 0;
@@ -280,16 +351,17 @@ float constrainF (float val, float minV, float maxV){
   return(val);
 }
 
-void read_vel_pos(){
+void read_robot_vel_pos(){
   enc1= roboclaw.ReadEncM1(address, &status1, &valid1);
   enc2 = roboclaw.ReadEncM2(address, &status2, &valid2);
   speed1 = roboclaw.ReadSpeedM1(address, &status3, &valid3);
   speed2 = roboclaw.ReadSpeedM2(address, &status4, &valid4);
   robot_vel_m_sec = float(speed2+speed1)/2/click_in_meter;
   robot_pos_m = float (enc2+enc1)/2/click_in_meter;
+  average_robot_vel_m_s = alpha_avg_vel* average_robot_vel_m_s + (1-alpha_avg_vel)*robot_vel_m_sec;
 }
 
-void set_motors_vel (float velocity ,float rotation ){
+void send_motors_commands (float velocity ,float rotation ){
   if (motion_enable) {
     velocity1 = (velocity-rotation) * click_in_meter;
     velocity2 = (velocity+rotation) * click_in_meter;
@@ -470,7 +542,7 @@ void send_telemetry(){
 //    Serial.print(" dd "); Serial.print(ddError);
 //    Serial.print(" int "); Serial.print(1000*integral);
 //    Serial.print(" wa "); Serial.print(57295*wanted_angle);
-//    Serial.print(" ac "); Serial.print(57295*actual_angle);
+//    Serial.print(" ac "); Serial.print(57295*pitch_rad);
 //    Serial.print(" avgdE "); Serial.print(1000*average_dError);
 //    Serial.print(" posEI "); Serial.print(1000*pos_error_integral);
 //    Serial.print(" velEI "); Serial.print(1000*vel_error_integral);
