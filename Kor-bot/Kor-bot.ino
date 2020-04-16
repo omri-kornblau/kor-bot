@@ -6,7 +6,7 @@
 
 #define Telemetry 0
 #define calib_gyro 0
-#define alpha_gyro 0.995         // takes most of the angle from gyro .. very little noise to acc
+#define alpha_gyro 0.995         // takes most of the pitch data from gyro .. very little noise to acc
 
 #define KDD_Angle_to_acc 0.4     //  0.4
 #define KD_Angle_to_acc 2        //  2 
@@ -15,22 +15,21 @@
 #define KI_Angle_to_acc_res 5    //  5        integral that resets when error change dir
 #define KP_vel_to_vel   0.015    //  0.015    adds to the velocity a factor of average velocity - do damp it down
 #define KD_avgdError_to_acc 15   //  15       slows the robot when closing the error fast - like KD , but on average D to eliminate noise 
-
 #define integral_limit 0.035
 
 #define KP_pos_to_angle  0.04          // 0.04 to keep 0
 #define KI_pos_to_angle  0.02          // 0.02 to keep 0
-#define pos_error_integral_limit 0.3   // 0.3
+#define pos_error_integral_limit 0.4   // 0.4
  
-#define KP_vel_to_angle  0.08          // 0.08
+#define KP_vel_to_angle  0.14          // 0.14
 #define KI_vel_to_angle  0.02          // 0.02
-#define vel_error_integral_limit 0.3   // 0.3
+#define vel_error_integral_limit 0.4   // 0.4
 
-#define Gyro_bias 4.1             // deg   lower = move forward
+#define Gyro_bias 3.35             // deg   lower = move forward
 
 #define alpha_avg_vel 0.9       // avergaring factor for the averaged velocity 
 #define alpha_avg_dError 0.9    // avergaring factor for the averaged derivative of the error 
-#define alpha_stick 0.9
+#define alpha_stick 0.95
 
 #define address 0x80            // adress of the roboclaw 128
 #define click_in_meter 47609    // encoder clics in one meter
@@ -191,7 +190,7 @@ uint8_t motion_enable = 0 , reset_encoders_when_stand = 0;
 uint8_t want_to_stand = 1, prev_want_to_stand;
 uint8_t SW1, prev_SW1, counter_SW1_ON, counter_SW1_OFF, SW1_pressed, SW1temp;
 uint8_t SW2, prev_SW2, counter_SW2_ON, counter_SW2_OFF, SW2_pressed, SW2temp;
-uint8_t SW1_motion_enable, main_LED; 
+uint8_t SW1_motion_enable, main_LED, pitch_out_of_range=0; 
 
 void setup() {
     pinMode (PIN_SW1,INPUT_PULLUP);
@@ -242,7 +241,7 @@ void  calc_PID_errors (){
   prev_wanted_angle = wanted_angle;  
 
   wanted_angle = KP_vel_to_angle * vel_error +  KI_vel_to_angle * vel_error_integral;
-  if (want_to_stand == 1 && reset_encoders_when_stand == 0) {    // keep pos only after swant to stand and encoders were reset
+  if (want_to_stand == 1 && reset_encoders_when_stand == 0) {    // keep pos only after want to stand and encoders were reset
     wanted_angle  += KP_pos_to_angle * pos_error +  KI_pos_to_angle * pos_error_integral;
   }
   
@@ -276,7 +275,7 @@ void deal_with_standing () {
   prev_want_to_stand = want_to_stand;
   if (abs(wanted_velocity)<=0.01) want_to_stand=1; else want_to_stand=0;
   if (want_to_stand ==1 && prev_want_to_stand==0)reset_encoders_when_stand = 1;
-  if (reset_encoders_when_stand == 1 && abs(robot_vel_m_sec)<0.02 ) { 
+  if (reset_encoders_when_stand == 1 && abs(robot_vel_m_sec)<0.01 ) { 
       roboclaw.SetEncM1(address,0);
       roboclaw.SetEncM2(address,0);
       reset_encoders_when_stand = 0;
@@ -284,9 +283,9 @@ void deal_with_standing () {
 }
 
 void get_user_commands () {
-  wanted_velocity = alpha_stick*wanted_velocity + (1-alpha_stick)* float(RemoteXY.joystick_1_y)/50;
-  wanted_rotation = alpha_stick*wanted_rotation + (1-alpha_stick)* float(RemoteXY.joystick_1_x)/200;
-  motion_enable = (RemoteXY.switch_1 || SW1_motion_enable);
+  wanted_velocity = alpha_stick * wanted_velocity + (1-alpha_stick) * float(-RemoteXY.joystick_1_y)/75;
+  wanted_rotation = alpha_stick * wanted_rotation + (1-alpha_stick) * float(RemoteXY.joystick_1_x)/200;
+  motion_enable = ((RemoteXY.switch_1 || SW1_motion_enable) && pitch_out_of_range ==0);
 
   prev_SW1 = SW1; 
   SW1temp = (1-digitalRead (PIN_SW1));
@@ -329,18 +328,23 @@ void get_pitch_and_vel () {
   orientation a = get_orientation();
   pitch_vel_rad_sec = a.pitch_vel / RADIANS_TO_DEGREES;
   pitch_rad = (a.pitch + Gyro_bias) / RADIANS_TO_DEGREES;
+  if (abs(pitch_rad)>0.4) pitch_out_of_range = 1; else pitch_out_of_range = 0;
 }
 
 void calc_pos_vel_errors(){
   prev_pos_error = pos_error;
   pos_error = wanted_position - robot_pos_m;
-  pos_error_integral += pos_error * deltaT;
+  if (want_to_stand ==1 && reset_encoders_when_stand ==0){    
+    pos_error_integral += pos_error * deltaT;
+  }   // accumulte position integrlar only when standing and after encoders were reset
   pos_error_integral = constrainF (pos_error_integral,-pos_error_integral_limit,pos_error_integral_limit); 
-  if (want_to_stand == 0 || motion_enable == 0 || reset_encoders_when_stand==1) pos_error_integral = 0;
+  if (motion_enable == 0) pos_error_integral = 0;
 
   prev_vel_error = vel_error;
   vel_error = wanted_velocity - average_robot_vel_m_s;
-  vel_error_integral += vel_error * deltaT;
+  if (want_to_stand ==1 && reset_encoders_when_stand ==0){    
+    vel_error_integral += vel_error * deltaT;
+  }   // accumulte position integrlar only when standing and after encoders were reset
   vel_error_integral = constrainF (vel_error_integral,-vel_error_integral_limit,vel_error_integral_limit); 
   if (motion_enable ==0)  vel_error_integral = 0;
 }
