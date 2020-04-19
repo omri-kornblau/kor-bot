@@ -6,42 +6,39 @@
 #define Telemetry   1
 #define calib_gyro  0
 
-#define alpha_gyro          0.99      // Takes most of the pitch data from gyro .. very little noise to acc
-#define mix_yaw_pitch      -0.02      // in-orthogonality of the gyro axes
-#define MPU_Address         0x68      // MPU6050 I2C address
+#define alpha_gyro        0.99        // Takes most of the pitch data from gyro .. very little noise to acc
+#define mix_yaw_pitch    -0.02        // in-orthogonality of the gyro axes
+#define MPU  0x68                     // MPU6050 I2C address
 
 #define KDD_Angle_to_acc    0.6       //  0.6
-#define KD_Angle_to_acc     8         //  8
-#define KP_Angle_to_acc     12        //  12
+#define KD_Angle_to_acc     4         //  4
+#define KP_Angle_to_acc     10        //  10
 #define KI_Angle_to_acc     3         //  3
-#define KI_Angle_to_acc_res 8         //  8     integral that resets when error change dir
-#define KP_vel_to_vel       0.0       //  0      0.015    adds to the velocity a factor of average velocity - do damp it down
-#define KD_avgdError_to_acc 8         //  8     slows the robot when closing the error fast - like KD , but on average D to eliminate noise 
+#define KI_Angle_to_acc_res 10        //  10       integral that resets when error change dir
+#define KP_vel_to_vel       0.0       //  0    0.015    adds to the velocity a factor of average velocity - do damp it down
+#define KD_avgdError_to_acc 15        //  15       slows the robot when closing the error fast - like KD , but on average D to eliminate noise 
 #define integral_limit      0.035
 
-#define KP_pos_to_angle     0.1       //  0.1   to keep 0
-#define KI_pos_to_angle     0.02      //  0.02  to keep 0
-#define pos_error_limit     0.2       //  max position error permitted for calculations 
-#define Pos_integral_limit  0.4       //  0.4
+#define KP_pos_to_angle     0.05      // 0.05 to keep 0
+#define KI_pos_to_angle     0.015     // 0.015 to keep 0
+#define Pos_integral_limit  0.4       // 0.4
 
-#define KP_vel_to_angle     0.05      //  0.05
-#define KP_avg_vel_to_angle 0.15      //  0.15
-#define KI_vel_to_angle     0.02      //  0.02
-#define Vel_integral_limit  0.4       //  0.4
+#define KP_vel_to_angle     0.07       // 0.07
+#define KP_avg_vel_to_angle 0.15      // 0.15
+#define KI_vel_to_angle     0.02      // 0.02
+#define Vel_integral_limit  0.4       // 0.4
 
-#define Gyro_bias 0.75                //  deg   lower value = move forward / add -1*offset displayed in phone
-#define gain_to_bot_acc     1.0       //  enlarge the effect of robot acceleration on the gyro
+#define Gyro_bias 0.75                // deg   lower value = move forward / add -1*offset displayed in phone
+#define gain_to_bot_acc     1.0       // enlarge the effect of robot acceleration on the gyro
 
-#define alpha_avg_vel       0.9       //  0.9 avergaring factor for the averaged velocity 
-#define alpha_avg_dError    0.9       //  0.9 avergaring factor for the averaged derivative of the error 
-#define alpha_stick         0.9       //  0.9 avergaring factor for the averaged user stick commands
-#define alpha_avg_vel_err   0.9       //  0.9 avergaring factor for the averaged velocity error
-#define alpha_yaw_average   0.9       //  0.9 
+#define alpha_avg_vel       0.9       // 0.9 avergaring factor for the averaged velocity 
+#define alpha_avg_dError    0.9       // 0.9 avergaring factor for the averaged derivative of the error 
+#define alpha_stick         0.9       // 0.9 avergaring factor for the averaged user stick commands
+#define alpha_avg_vel_err   0.95      // 0.95 avergaring factor for the averaged velocity error
+#define alpha_yaw_average   0.9       // 0.9 
 
-#define joystick_dead_band  0.1       //
-
-#define RoboClaw_address    0x80      //  adress of the roboclaw 128
-#define click_in_meter      47609     //  encoder clics in one meter
+#define RoboClaw_address    0x80      // adress of the roboclaw 128
+#define click_in_meter      47609     // encoder clics in one meter
 #define max_velocity        3
 #define max_jerk            7
 #define max_acceleration    2
@@ -53,11 +50,12 @@
 
 #define earth_G   9.8
 #define RAD_TO_DEGs 57.295
-#define MPU6050_ACCEL_XOUT_H  0x3B   // R
-#define MPU6050_GYRO_DATA     0x43   // R 
-#define MPU6050_PWR_MGMT_1    0x6B   // R/W
-#define MPU6050_PWR_MGMT_2    0x6C   // R/W
-#define MPU6050_WHO_AM_I      0x75   // R
+#define MPU6050_ACCEL_XOUT_H 0x3B   // R
+#define MPU6050_GYRO_DATA 0x43      // R 
+#define MPU6050_PWR_MGMT_1 0x6B     // R/W
+#define MPU6050_PWR_MGMT_2 0x6C     // R/W
+#define MPU6050_WHO_AM_I  0x75      // R
+#define MPU6050_I2C_ADDRESS 0x68    // R
 
 
 //////////////////////////////////////////////
@@ -107,6 +105,7 @@ struct {
 //           END RemoteXY include          //
 /////////////////////////////////////////////
 
+
 RoboClaw roboclaw(&Serial1,10000);
 
 typedef struct {
@@ -129,7 +128,7 @@ float elapsedTime, previousTime, time_of_MPU_request;
 
 orientation robot_orientation;
 
-unsigned long last_time,last_sent, last_cycle, lastUSRblink;
+unsigned long last_time,last_sent, last_cycle, last_main, lastUSRblink;
 float wanted_angle = 0, prev_wanted_angle;
 float pitch_rad;
 float pitch_vel_rad_sec = 0;
@@ -200,35 +199,57 @@ void setup()
         EEPROM.get(16, Gyro_Yaw_bias);     delay(20);
       }
     digitalWrite (PIN_LED2, 0);
+      // initialize timer1 
+  // initialize timer1 
+  noInterrupts();           // disable all interrupts
+  TCCR4A = 0;
+  TCCR4B = 0;
+  TCNT4  = 0;
+  OCR4A = 20000;            // compare match register 16MHz/8/100Hz
+  TCCR4B |= (1 << WGM12);   // CTC mode
+  TCCR4B |= (1 << CS11);    // 8 prescaler 
+  TIMSK4 |= (1 << OCIE1A);  // enable timer compare interrupt
+  interrupts();             // enab
 }
 
-
-void loop() 
-{ 
-    // Serial.println (millis()-last_cycle);
-    while (millis()-last_cycle<10) {}  
+ISR(TIMER4_COMPA_vect)          // timer compare interrupt service routine
+{
+    Serial.println (millis()-last_cycle);
     last_cycle = millis ();
+      noInterrupts(); 
     deal_with_standing  ();
     get_pitch_and_vel   ();
     read_robot_vel_pos  ();
     calc_pos_vel_errors ();
     calc_PID_errors     ();
     calc_wanted_velocity();
+    interrupts();  
+}
+
+
+void loop() 
+{ 
+    while (millis() - last_main<10) {interrupts();}
+    last_main = millis  ();
+
+
     send_motors_commands(wanted_velocity_from_alg_m_s, wanted_rotation_from_user);
+    
     RemoteXY_Handler    ();      // read from bluetooth 
     read_user_commands  ();
     control_LEDs        ();
     send_to_RaspberryPi ();
     send_telemetry      ();
     send_to_remoteXY    ();
-    first_run = 0;
+
+        first_run = 0;
 }
 
 
 void  reset_gyro ()
 {
     digitalWrite (PIN_LED2, 1);
-    Wire.beginTransmission(MPU_Address);            // Start communication with MPU6050 // MPU=0x68
+    Wire.beginTransmission(MPU);            // Start communication with MPU6050 // MPU=0x68
     Wire.write(MPU6050_PWR_MGMT_1);         // Talk to the register 6B
     Wire.write(0x00);                       // Make reset - place a 0 into the 6B register
     Wire.endTransmission(true);             // End the transmission
@@ -323,7 +344,7 @@ void  deal_with_standing ()
     prev_want_to_stand = want_to_stand;
     if (abs(wanted_velocity_from_user_m_s) <= 0.01 && abs(wanted_rotation_from_user) <= 0.02) want_to_stand = 1; 
     else want_to_stand = 0;
-    if (want_to_stand == 1 && prev_want_to_stand == 0) reset_encoders_when_stand = 1;
+    if (want_to_stand == 1 && prev_want_to_stand == 0)reset_encoders_when_stand = 1;
     if (reset_encoders_when_stand == 1 && abs(robot_vel_m_sec) < 0.01 ) 
       { 
         roboclaw.SetEncM1(RoboClaw_address,0);
@@ -334,13 +355,9 @@ void  deal_with_standing ()
 
 
 void  read_user_commands () 
-{   float stick_velocity_deadbanded;
-    stick_velocity_deadbanded = 0;
-    if (RemoteXY.joystick_1_y > joystick_dead_band) stick_velocity_deadbanded = RemoteXY.joystick_1_y - joystick_dead_band;
-    if (RemoteXY.joystick_1_y <-joystick_dead_band) stick_velocity_deadbanded = RemoteXY.joystick_1_y + joystick_dead_band;
-
-    alpha_beta (filtered_stick_velocity, float(-stick_velocity_deadbanded)/50 , alpha_stick);
-    alpha_beta (filtered_stick_rotation, float( RemoteXY.joystick_1_x)/100, alpha_stick);
+{
+    alpha_beta (filtered_stick_velocity, float(-RemoteXY.joystick_1_y)/50 , alpha_stick);
+    alpha_beta (filtered_stick_rotation, float( RemoteXY.joystick_1_x)/150, alpha_stick);
     if (filtered_stick_velocity > wanted_velocity_from_user_m_s)
       {
         max_allowed_acceleration = max_allowed_acceleration + max_jerk * deltaT;
@@ -353,14 +370,13 @@ void  read_user_commands ()
         if (max_allowed_acceleration < max_acceleration) max_allowed_acceleration = max_acceleration;
         wanted_velocity_from_user_m_s = max(wanted_velocity_from_user_m_s - max_allowed_acceleration * deltaT , filtered_stick_velocity);
       }
-    wanted_rotation_from_user = 0;
-    if (filtered_stick_rotation > joystick_dead_band) wanted_rotation_from_user = filtered_stick_rotation - joystick_dead_band;
-    if (filtered_stick_rotation <-joystick_dead_band) wanted_rotation_from_user = filtered_stick_rotation + joystick_dead_band;
+
+    wanted_rotation_from_user = filtered_stick_rotation;
     
     last_motion_enable = motion_enable;
     motion_enable = ((RemoteXY.switch_1 || SW1_motion_enable) && pitch_out_of_range ==0);
 
-    if (motion_enable != last_motion_enable) reset_before_moving();
+    if (motion_enable == 1 && last_motion_enable == 0) reset_before_moving();
       
     if (abs(wanted_rotation_from_user) < 0.03)
       {
@@ -447,7 +463,6 @@ void calc_pos_vel_errors()
 {
     prev_pos_error = pos_error;
     pos_error = wanted_position - robot_pos_m;
-    pos_error = constrainF (pos_error, -pos_error_limit, pos_error_limit);
     if (want_to_stand ==1 && reset_encoders_when_stand ==0)
       {    
         pos_error_integral += pos_error * deltaT;
@@ -533,10 +548,10 @@ void calibrate_gyro_vel()
 
 void request_from_MPU (int register_start_address, int number_of_bytes)
 {
-    Wire.beginTransmission(MPU_Address);
+    Wire.beginTransmission(MPU);
     Wire.write(register_start_address);                         // Start with register 0x3B (ACCEL_XOUT_H)
     Wire.endTransmission(false);
-    Wire.requestFrom(MPU_Address, number_of_bytes, true);               // Read 6 registers total, each axis value is stored in 2 registers
+    Wire.requestFrom(MPU, number_of_bytes, true);               // Read 6 registers total, each axis value is stored in 2 registers
 }
 
 orientation get_orientation() 
