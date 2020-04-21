@@ -116,27 +116,28 @@ typedef struct {
   float pitch_vel;
 } orientation;
 
-float AccX, AccY, AccZ;
-float accAngleY;
-float gyro_Pitch_vel,   gyro_Yaw_vel;
-float gyro_Pitch_angle, gyro_Yaw_angle;
-float gyro_Pitch_bias,  gyro_Yaw_bias;
-float elapsedTime, previousTime, time_of_MPU_request;
-
 orientation robot_orientation;
 
-unsigned long last_time,last_sent, last_cycle, lastUSRblink;
-float wanted_angle = 0, prev_wanted_angle;
-float pitch_rad;
-float pitch_vel_rad_sec = 0;
-float wanted_velocity_from_alg_m_s = 0;
-float wanted_acc_m_ss = 0;
+uint32_t last_time,last_sent;
+uint32_t last_cycle;
+uint32_t lastUSRblink;
 
 uint8_t status1 , status2 , status3 , status4 ;
 bool    valid1  , valid2  , valid3  , valid4  ;
 int32_t enc1    , enc2;
 int32_t speed1  , speed2;
 
+float AccX, AccY, AccZ;
+float accAngleY;
+float gyro_Pitch_vel,   gyro_Yaw_vel;
+float gyro_Pitch_angle, gyro_Yaw_angle;
+float gyro_Pitch_bias,  gyro_Yaw_bias;
+float elapsedTime, previousTime, time_of_MPU_request;
+float wanted_angle = 0, prev_wanted_angle;
+float pitch_rad;
+float pitch_vel_rad_sec = 0;
+float wanted_velocity_from_alg_m_s = 0;
+float wanted_acc_m_ss = 0;
 float robot_pos_m;
 float robot_vel_m_sec;
 float gyro_acc_m_ss;
@@ -159,17 +160,24 @@ float started_rotation_angle;
 float wanted_position = 0;
 float wanted_velocity_from_user_m_s = 0;
 float wanted_rotation_from_user = 0;
-float filtered_stick_velocity, filtered_stick_rotation, max_allowed_acceleration;
+float filtered_stick_velocity = 0;
+float filtered_stick_rotation = 0;
+float max_allowed_acceleration = 0;
 
-uint8_t motion_enable = false , reset_encoders_when_stand = false;
-uint8_t want_to_stand = true, prev_want_to_stand;
-uint8_t SW1 , prev_SW1 , SW1_pressed , SW1temp;
-uint8_t SW2 , prev_SW2 , SW2_pressed , SW2temp;
-uint8_t prev_button_1, prev_motion_enable, main_LED;
-uint8_t pitch_out_of_range=false; 
-uint8_t other_cycle =0  ; 
-uint8_t RaspberryPi_index, dizzy , first_run=true;
+bool motion_enable = false;
+bool reset_encoders_when_stand = false;
+bool want_to_stand = true;
+bool prev_want_to_stand = true;
+bool SW1 , prev_SW1 , SW1_pressed , SW1temp;
+bool SW2 , prev_SW2 , SW2_pressed , SW2temp;
+bool prev_button_1, prev_motion_enable;
+bool main_LED = true;
+bool pitch_out_of_range = false; 
+bool other_cycle = false; 
+bool first_run = true;
+bool dizzy = false;
 
+uint8_t RaspberryPi_index;
 
 void setup() 
 {
@@ -332,7 +340,7 @@ void  read_user_commands ()
     
     if (abs(wanted_rotation_from_user) < SPEED_TO_STAND_MS)
       {
-        if (abs(robot_orientation.yaw - started_rotation_angle) > 270) dizzy =1;
+        if (abs(robot_orientation.yaw - started_rotation_angle) > 270) dizzy = true;
         started_rotation_angle = robot_orientation.yaw;
       }
 
@@ -365,9 +373,11 @@ void  reset_before_moving()
     filtered_stick_rotation = 0;
 }
 
-uint8_t  filter_switch_transients (uint8_t SW_status, uint8_t &SWX , uint8_t switch_num)
+void filter_switch_transients (bool SW_status, bool &SWX , uint8_t switch_num)
 { 
-    static uint8_t prev_SW_status[2], counter[2];
+    static bool prev_SW_status[2];
+    static uint8_t counter[2];
+
     counter[switch_num] +=1;   
     if (counter[switch_num] > 10) 
        {
@@ -542,8 +552,8 @@ void request_from_MPU (int register_start_address, int number_of_bytes)
 
 void calibrate_gyro_vel() 
 {
-    int c=0; 
-    int num_reps = 1000;
+    int32_t c = 0; 
+    int32_t num_reps = 1000;
     while (c < num_reps) 
       {
         request_from_MPU (MPU6050_GYRO_DATA+2, 4);
@@ -591,7 +601,7 @@ void  send_to_RaspberryPi ()
     if (RaspberryPi_index == 2)
         Serial3.write(byte(constrain (int (50*robot_vel_m_sec + 128),0,254) ));        // send vel in 2cm/sec
         Serial3.write(byte( dizzy));  
-        if (dizzy ==1) dizzy = 0; 
+        if (dizzy) dizzy = false; 
     RaspberryPi_index += 1;
     if (RaspberryPi_index == 3) RaspberryPi_index = 0;
 }
