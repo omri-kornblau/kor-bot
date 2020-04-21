@@ -1,5 +1,6 @@
-#include <I2C.h>
+#include <Wire.h>
 #include <EEPROM.h>
+#include <I2Cdev.h>
 #include <RoboClaw.h>
 
 #define SEND_TELEMETRY    false
@@ -14,8 +15,8 @@
 #define MPU6050_PWR_MGMT_1    0x6B      // R/W
 #define EARTH_GRAVITATION     9.8       // M/S2
 #define RAD_TO_DEGs           57.295
-#define GYRO_HEIGTH_M         0.1       // m
-#define IMU_PITCH_OFFSET      0.3       //  deg   lower value = move forward / add -1*offset displayed in phone
+#define GYRO_HEIGTH_M         0.18      // m
+#define IMU_PITCH_OFFSET      0.62      //  deg   lower value = move forward / add -1*offset displayed in phone
 
 // PARAMETERS OF ACCELERATION CALCULATION EXTENDED PID FILTER
 #define KDD_ANGLE_TO_ACC      0.6       //  0.6
@@ -48,7 +49,7 @@
 #define ROBOCLAW_ADDRESS      0x80      //  adress of the roboclaw 128
 #define CLICK_IN_METER        47609     //  encoder clics in one meter
 #define MAX_VELOCITY_ALG_MS   4         //  max velocity that the algorithms will send to the motors
-#define MAX_VELOCITY_USR_MS   2.0       //  max velocity that the user can request
+#define MAX_VELOCITY_USR_MS   2.5       //  max velocity that the user can request
 #define MAX_ACCELERATION_MSS  2.5       //  max acceleration that the user can request 
 #define MAX_JERK_MSSS         10
 #define MAX_PITCH_FOR_MOTION  0.4       //  disable motion above this angle
@@ -131,7 +132,7 @@ float accAngleY;
 float gyro_Pitch_vel,   gyro_Yaw_vel;
 float gyro_Pitch_angle, gyro_Yaw_angle;
 float gyro_Pitch_bias,  gyro_Yaw_bias;
-float elapsedTime, previousTime;
+float elapsedTime, previousTime, time_of_MPU_request;
 float wanted_angle = 0, prev_wanted_angle;
 float pitch_rad;
 float pitch_vel_rad_sec = 0;
@@ -186,11 +187,8 @@ void setup()
     pinMode (PIN_LED2,OUTPUT);
 
     RemoteXY_Init (); 
+    Wire.begin();
     
-    I2c.begin();
-    I2c.timeOut(500);
-    I2c.pullup(true);
-        
     if (SEND_TELEMETRY) Serial.begin(115200);    // Communication via USB to PC
                                             // Serial1 is connected to the Roboclaw  driver  and  is configured there
                                             // Serial2 is connected to the Bluetooth RemoteXY and is configured there
@@ -242,7 +240,10 @@ void loop()
 
 void  reset_gyro ()
 {
-    I2c.write(MPU_ADDRESS,MPU6050_PWR_MGMT_1,0x00);
+    Wire.beginTransmission(MPU_ADDRESS);    // Start communication with MPU
+    Wire.write(MPU6050_PWR_MGMT_1);         // Talk to the register 6B
+    Wire.write(0x00);                       // reset - place a 0 into the 6B register
+    Wire.endTransmission(true);             // End the transmission
 }
 
 
@@ -484,12 +485,20 @@ void send_motors_commands (float velocity ,float rotation )
 
 orientation get_orientation() 
 {
+    static uint8_t timed_out;
     static float gyro_vel_m_sec;
     float prev_gyro_vel_m_sec;
     request_from_MPU (MPU6050_ACCEL_DATA, 6);
-    AccX = (I2c.receive() << 8 | I2c.receive()) / 16384.0;        //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
-    AccY = (I2c.receive() << 8 | I2c.receive()) / 16384.0; 
-    AccZ = (I2c.receive() << 8 | I2c.receive()) / 16384.0;
+    timed_out = 0; 
+    time_of_MPU_request = millis();
+    while (Wire.available() < 5 || timed_out) { if (millis() - time_of_MPU_request > 10) timed_out = 1; }
+    if (timed_out) reset_gyro ();
+    else
+      {
+        AccX = (Wire.read() << 8 | Wire.read()) / 16384.0;        //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
+        AccY = (Wire.read() << 8 | Wire.read()) / 16384.0; 
+        AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0;
+      }
 
     prev_gyro_vel_m_sec = gyro_vel_m_sec;
     gyro_vel_m_sec = robot_vel_m_sec + GYRO_HEIGTH_M * gyro_Pitch_vel / RAD_TO_DEGs;
@@ -504,9 +513,15 @@ orientation get_orientation()
     previousTime =  millis();                                 // Current time actual time read
 
     request_from_MPU (MPU6050_GYRO_DATA+2, 4);
-    gyro_Pitch_vel = (I2c.receive() << 8 | I2c.receive()) / 131.0;
-    gyro_Yaw_vel   = (I2c.receive() << 8 | I2c.receive()) / 131.0;
-
+    timed_out = 0; 
+    time_of_MPU_request = millis();
+    while (Wire.available() < 3 || timed_out) { if (millis() - time_of_MPU_request > 10) timed_out = 1; }
+    if (timed_out) reset_gyro ();
+    else
+      {
+        gyro_Pitch_vel = (Wire.read() << 8 | Wire.read()) / 131.0;
+        gyro_Yaw_vel   = (Wire.read() << 8 | Wire.read()) / 131.0;
+      }
     gyro_Pitch_vel = gyro_Pitch_vel - gyro_Pitch_bias; 
     gyro_Yaw_vel   = gyro_Yaw_vel   - gyro_Yaw_bias;
      
@@ -528,8 +543,11 @@ orientation get_orientation()
 
 
 void request_from_MPU (int register_start_address, int number_of_bytes)
-{   
-   I2c.read(MPU_ADDRESS,register_start_address,number_of_bytes);
+{
+    Wire.beginTransmission(MPU_ADDRESS);
+    Wire.write(register_start_address);                         // Start with register 0x3B (ACCEL_XOUT_H)
+    Wire.endTransmission(false);
+    Wire.requestFrom(MPU_ADDRESS, number_of_bytes, true);               // Read 6 registers total, each axis value is stored in 2 registers
 }
 
 
@@ -540,8 +558,8 @@ void calibrate_gyro_vel()
     while (c < num_reps) 
       {
         request_from_MPU (MPU6050_GYRO_DATA+2, 4);
-        gyro_Pitch_vel = I2c.receive() << 8 | I2c.receive();
-        gyro_Yaw_vel   = I2c.receive() << 8 | I2c.receive();
+        gyro_Pitch_vel = Wire.read() << 8 | Wire.read();
+        gyro_Yaw_vel   = Wire.read() << 8 | Wire.read();
         gyro_Pitch_bias = gyro_Pitch_bias + (gyro_Pitch_vel / 131.0);
         gyro_Yaw_bias   = gyro_Yaw_bias   + (gyro_Yaw_vel   / 131.0);
         c++;
