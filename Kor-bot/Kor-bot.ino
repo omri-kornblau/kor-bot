@@ -7,51 +7,53 @@
 
 // IMU & Gyro related definitions //
 #define ALPHA_GYRO_ACCEL      0.99      // Takes most of the pitch data from gyro .. very little noise to acc
-#define MIX_YAW_PITCH        -0.02      // in-orthogonality of the gyro axes
+#define MIX_YAW_PITCH         -0.016    // in-orthogonality of the gyro axes //  more positive = right moves more when rotating 
 #define MPU_ADDRESS           0x68      // MPU6050 I2C address
 #define MPU6050_ACCEL_DATA    0x3B      // R
 #define MPU6050_GYRO_DATA     0x43      // R 
 #define MPU6050_PWR_MGMT_1    0x6B      // R/W
 #define EARTH_GRAVITATION     9.8       // M/S2
 #define RAD_TO_DEGs           57.295
-#define GYRO_HEIGTH_M         0.1       // m
-#define IMU_PITCH_OFFSET      0.3       //  deg   lower value = move forward / add -1*offset displayed in phone
+#define GYRO_HEIGT_M          0.08      // m
+#define IMU_PITCH_OFFSET      3.7       //  deg   lower value = move forward / add -1*offset displayed in phone
+#define VALID_ACC_ANGLE_DIFF  12        // if diff between the gyro angle and the acc angle is above this, the accelerometers are temporarily disabled
 
 // PARAMETERS OF ACCELERATION CALCULATION EXTENDED PID FILTER
-#define KDD_ANGLE_TO_ACC      0.6       //  0.6
-#define KD_ANGLE_TO_ACC       8         //  8
-#define KP_ANGLE_TO_ACC       15        //  15
-#define KI_ANGLE_TO_ACC       3         //  3
-#define KI_ANGLE_TO_ACC_RES   10        //  10    integral that resets when error change dir
+#define KDD_PITCH_TO_ACC      0.6       //  0.6
+#define KD_PITCH_TO_ACC       8         //  8
+#define KP_PITCH_TO_ACC       15        //  15
+#define KI_PITCH_TO_ACC       3         //  3
+#define KI_PITCH_TO_ACC_RES   10        //  10    integral that resets when error change dir
 #define KD_AVGdERROR_TO_ACC   2         //  2     slows the robot when closing the error fast - like KD , but on average D to eliminate noise 
 #define INTEGRAL_LIMIT        0.035
 
-// PARAMETERS OF WANTED ANGLE CALCULATION  PID FILTER
-#define KP_POS_TO_ANGLE       0.1       //  0.1   to keep 0
-#define KI_POS_TO_ANGLE       0.01      //  0.01  to keep 0
+// PARAMETERS OF WANTED PITCH CALCULATION  PID FILTER
+#define KP_POS_TO_PITCH       0.05      //  0.05   to keep 0
+#define KI_POS_TO_PITCH       0.01      //  0.01  to keep 0
 #define POS_ERROR_LIMIT       0.2       //  max position error permitted for calculations 
 #define POS_INTEGRAL_LIMIT    0.4       //  0.4
-#define KP_VEL_TO_ANGLE       0.1       //  0.1
-#define KP_AVG_VEL_TO_ANGLE   0.07      //  0.07     
-#define KI_VEL_TO_ANGLE       0.01      //  0.01
+#define KP_VEL_TO_PITCH       0.1       //  0.1
+#define KP_AVG_VEL_TO_PITCH   0.1       //  0.1     
+#define KI_VEL_TO_PITCH       0.01      //  0.01
 #define VEL_INTEGRAL_LIMIT    0.4       //  0.4
 
 #define ALPHA_AVG_VEL         0.9       //  0.9 avergaring factor for the averaged velocity 
 #define ALPHA_AVG_dERROR      0.9       //  0.9 avergaring factor for the averaged derivative of the error 
-#define ALPHA_STICK           0.9       //  0.9 avergaring factor for the averaged user stick commands
+#define ALPHA_STICK           0.8       //  0.9 avergaring factor for the averaged user stick commands
 #define ALPHA_AVG_VEL_ERR     0.9       //  0.9 avergaring factor for the averaged velocity error
 #define ALPHA_YAW_AVERAGE     0.9       //  0.9 
 
-#define JOYSTICK_DEAD_BAND    0.1       //
-#define SPEED_TO_STAND_MS     0.02      // 0.2 m/s
+#define JOYSTICK_DEAD_BAND    10        // % of joystick range 
+#define SPEED_TO_STAND_MS     0.03      // 2 cm/s
 
 #define ROBOCLAW_ADDRESS      0x80      //  adress of the roboclaw 128
 #define CLICK_IN_METER        47609     //  encoder clics in one meter
-#define MAX_VELOCITY_ALG_MS   4         //  max velocity that the algorithms will send to the motors
-#define MAX_VELOCITY_USR_MS   2.0       //  max velocity that the user can request
-#define MAX_ACCELERATION_MSS  2.5       //  max acceleration that the user can request 
-#define MAX_JERK_MSSS         10
-#define MAX_PITCH_FOR_MOTION  0.4       //  disable motion above this angle
+#define MAX_VELOCITY_ALG_MS   3         //  max velocity that the algorithms will send to the motors
+#define MAX_VELOCITY_USR_MS   1.5       //  max velocity that the user can request
+#define MAX_ACCELERATION_MSS  1.8       //  max acceleration that the user can request 
+#define MAX_JERK_MSSS         4.0
+#define MAX_ROTATION_USR_MS   1.0
+#define MAX_PITCH_FOR_MOTION  0.6       //  disable motion above this angle
 
 #define PIN_SW1   3
 #define PIN_SW2   4
@@ -75,11 +77,15 @@
 // RemoteXY configurate  
 #pragma pack(push, 1)
 uint8_t RemoteXY_CONF[] =
-  { 255,3,0,9,0,36,0,10,24,1,
-  5,32,4,41,54,54,190,26,31,68,
-  2,1,1,61,27,186,50,137,1,0,
-  51,87,12,12,191,190,0,65,2,2,
-  35,12,12 };
+  { 255,4,0,9,0,76,0,10,24,1,
+  5,32,10,47,44,44,190,26,31,68,
+  2,0,0,63,25,186,50,137,1,0,
+  51,88,12,12,191,190,0,65,2,50,
+  41,13,13,3,134,8,26,47,9,191,
+  26,129,0,9,35,41,4,192,87,65,
+  32,32,71,65,32,32,32,67,70,32,
+  32,72,89,32,32,86,65,32,32,32,
+  67,71,0 };
   
 // this structure defines all the variables and events of your control interface 
 struct {
@@ -88,6 +94,7 @@ struct {
   int8_t joystick_1_x; // =-100..100 x-coordinate joystick position 
   int8_t joystick_1_y; // =-100..100 y-coordinate joystick position 
   uint8_t button_1; // =1 if button pressed, else =0 
+  uint8_t select_1; // =0 if select position A, =1 if position B, =2 if position C, ... 
 
     // output variables
   float onlineGraph_1_var1;
@@ -104,8 +111,6 @@ struct {
 //           END RemoteXY include          //
 /////////////////////////////////////////////
 
-
-
 RoboClaw roboclaw(&Serial1,10000);
 
 typedef struct {
@@ -120,19 +125,13 @@ orientation robot_orientation;
 uint32_t last_time,last_sent;
 uint32_t last_cycle;
 uint32_t lastUSRblink;
+uint16_t acc_fail_events_counter;
 
-uint8_t status1 , status2 , status3 , status4 ;
-bool    valid1  , valid2  , valid3  , valid4  ;
-int32_t enc1    , enc2;
-int32_t speed1  , speed2;
-
-float AccX, AccY, AccZ;
-float accAngleY;
 float gyro_Pitch_vel,   gyro_Yaw_vel;
 float gyro_Pitch_angle, gyro_Yaw_angle;
 float gyro_Pitch_bias,  gyro_Yaw_bias;
-float elapsedTime, previousTime;
-float wanted_angle = 0, prev_wanted_angle;
+float accAngleY;
+float wanted_pitch = 0, prev_wanted_pitch;
 float pitch_rad;
 float pitch_vel_rad_sec = 0;
 float wanted_velocity_from_alg_m_s = 0;
@@ -154,29 +153,31 @@ float pos_error , prev_pos_error, pos_error_integral;
 float vel_error , vel_error_integral;
 float averaged_vel_error;
 float deltaT = 0.01;
-float velocity_Motor_1, velocity_Motor_2;
 float started_rotation_angle;
 float wanted_position = 0;
 float wanted_velocity_from_user_m_s = 0;
 float wanted_rotation_from_user = 0;
 float filtered_stick_velocity = 0;
 float filtered_stick_rotation = 0;
-float max_allowed_acceleration = 0;
+float gyro_Yaw_bias_temp = 0;
+float prev_wanted_acceleration;
 
 bool motion_enable = false;
-bool reset_encoders_when_stand = false;
+bool prev_motion_enable = false;
 bool want_to_stand = true;
 bool prev_want_to_stand = true;
+bool reset_encoders_when_stand = false;
 bool SW1 , prev_SW1 , SW1_pressed , SW1temp;
 bool SW2 , prev_SW2 , SW2_pressed , SW2temp;
-bool prev_button_1, prev_motion_enable;
-bool main_LED = true;
+bool prev_button_1;
 bool pitch_out_of_range = false; 
 bool other_cycle = false; 
 bool first_run = true;
+bool main_LED = true;
 bool dizzy = false;
 
 uint8_t RaspberryPi_index;
+uint8_t busy_cycle_time;
 
 void setup() 
 {
@@ -210,31 +211,31 @@ void setup()
 
 void loop() 
 { 
-    // Serial.println (millis()-last_cycle);
+    busy_cycle_time = millis()-last_cycle;
     while (millis()-last_cycle<10) {}  
     last_cycle = millis ();
+    
     deal_with_standing  ();
-       digitalWrite (PIN_LED2, 1);
     get_pitch_and_vel   ();
-       digitalWrite (PIN_LED2, 0);
     read_robot_vel_pos  ();
     calc_pos_vel_errors ();
     calc_PID_errors     ();
     calc_wanted_velocity();
-    send_motors_commands(wanted_velocity_from_alg_m_s, wanted_rotation_from_user);
+    send_motors_commands();
     if (other_cycle) 
-      {    
-        send_to_remoteXY    ();
-        RemoteXY_Handler    ();      // read from bluetooth 
-      }
+    {    
+      send_to_remoteXY    ();
+      RemoteXY_Handler    ();      // read from bluetooth 
+    }
     else
-      { 
-        control_LEDs        ();
-        send_to_RaspberryPi ();
-        send_telemetry      ();
-      }
+    { 
+      control_LEDs        ();
+      send_to_RaspberryPi ();
+      send_telemetry      ();
+    }
     read_user_commands  ();
     
+    if (RemoteXY.select_1 == 5) calibrate_gyro_yaw(); 
     first_run = false;
     toggle (other_cycle);
 }
@@ -247,11 +248,45 @@ void  reset_gyro ()
 
 
 void  send_to_remoteXY()
-{
-    RemoteXY.onlineGraph_1_var1 = wanted_angle  * RAD_TO_DEGs;
-    RemoteXY.onlineGraph_1_var2 = pitch_rad     * RAD_TO_DEGs;
-    if (motion_enable) RemoteXY.led_1_g = 255; else RemoteXY.led_1_g = 0;
+{ 
+  switch (RemoteXY.select_1)
+    {
+      case 0:  // actual pitch vs wanted pitch    
+        RemoteXY.onlineGraph_1_var1 = wanted_pitch * RAD_TO_DEGs;
+        RemoteXY.onlineGraph_1_var2 = pitch_rad    * RAD_TO_DEGs;
+        break;
+  
+      case 1:  // accelerometer based pitch vs gyro pitch
+        RemoteXY.onlineGraph_1_var1 = accAngleY;
+        RemoteXY.onlineGraph_1_var2 = pitch_rad    * RAD_TO_DEGs;
+        break;
+  
+      case 2:  // busy time in cycle and accelerometer failures counter
+        RemoteXY.onlineGraph_1_var1 = acc_fail_events_counter;
+        RemoteXY.onlineGraph_1_var2 = busy_cycle_time;
+        break;
+  
+      case 3:  // wanted heading vs yaw
+        RemoteXY.onlineGraph_1_var1 = robot_orientation.yaw;
+        RemoteXY.onlineGraph_1_var2 = 0;
+        break;
+
+      case 4:  // wanted heading vs yaw
+        RemoteXY.onlineGraph_1_var1 = wanted_velocity_from_user_m_s;
+        RemoteXY.onlineGraph_1_var2 = prev_wanted_acceleration;
+        break;
+
+      case 5:  // wanted heading vs yaw
+        RemoteXY.onlineGraph_1_var1 = robot_orientation.yaw;
+        RemoteXY.onlineGraph_1_var2 = gyro_Yaw_bias_temp;
+        break;
+  
+      default:
+        break;
+    }
+  if (motion_enable) RemoteXY.led_1_g = 255; else RemoteXY.led_1_g = 0;
 }
+
 
 void  calc_PID_errors ()
 {
@@ -260,15 +295,15 @@ void  calc_PID_errors ()
 
     prev_error  = error;
     prev_dError = dError;
-    prev_wanted_angle = wanted_angle;  
+    prev_wanted_pitch = wanted_pitch;  
 
-    wanted_angle = KP_VEL_TO_ANGLE * vel_error +  KI_VEL_TO_ANGLE * vel_error_integral + KP_AVG_VEL_TO_ANGLE * averaged_vel_error;
+    wanted_pitch = KP_VEL_TO_PITCH * vel_error +  KI_VEL_TO_PITCH * vel_error_integral + KP_AVG_VEL_TO_PITCH * averaged_vel_error;
     if (want_to_stand && !reset_encoders_when_stand) // keep pos only after want to stand and encoders were reset
       {
-        wanted_angle  += KP_POS_TO_ANGLE * pos_error +  KI_POS_TO_ANGLE * pos_error_integral;
+        wanted_pitch  += KP_POS_TO_PITCH * pos_error +  KI_POS_TO_PITCH * pos_error_integral;
       }
 
-    error = pitch_rad - wanted_angle;
+    error = pitch_rad - wanted_pitch;
 
     integral += error * deltaT;
     constrainF (integral, -INTEGRAL_LIMIT , INTEGRAL_LIMIT); 
@@ -278,7 +313,7 @@ void  calc_PID_errors ()
     constrainF (integral_res, -INTEGRAL_LIMIT , INTEGRAL_LIMIT); 
     if (prev_error * error<0 || !motion_enable) integral_res = 0;
 
-    dError = pitch_vel_rad_sec - (wanted_angle - prev_wanted_angle) / deltaT;   // derivative of the error can be assumed to be the gyro rate
+    dError = pitch_vel_rad_sec - (wanted_pitch - prev_wanted_pitch) / deltaT;   // derivative of the error can be assumed to be the gyro rate
     alpha_beta (average_dError, dError, ALPHA_AVG_dERROR);
 
     ddError = (dError - prev_dError) / deltaT;  
@@ -288,8 +323,8 @@ void  calc_PID_errors ()
 void  calc_wanted_velocity ()
 {
     base_acceleration_to_cancel_moment = EARTH_GRAVITATION * tan(pitch_rad);
-    wanted_acc_m_ss  = base_acceleration_to_cancel_moment   + KP_ANGLE_TO_ACC  * error   + KI_ANGLE_TO_ACC    * integral;
-    wanted_acc_m_ss += KD_ANGLE_TO_ACC     * dError         + KDD_ANGLE_TO_ACC * ddError + KI_ANGLE_TO_ACC_RES* integral_res;
+    wanted_acc_m_ss  = base_acceleration_to_cancel_moment   + KP_PITCH_TO_ACC  * error   + KI_PITCH_TO_ACC    * integral;
+    wanted_acc_m_ss += KD_PITCH_TO_ACC     * dError         + KDD_PITCH_TO_ACC * ddError + KI_PITCH_TO_ACC_RES* integral_res;
     wanted_acc_m_ss += KD_AVGdERROR_TO_ACC * average_dError;
     
     wanted_velocity_from_alg_m_s = wanted_velocity_from_alg_m_s + wanted_acc_m_ss * deltaT;
@@ -312,31 +347,51 @@ void  deal_with_standing ()
       }
 }
 
+void  filter_deadband_stick (float &filtered_stick_val, float raw_stick_val, float max_value)
+{
+    float stick_val_deadbanded;
+    stick_val_deadbanded = 0;
+    if (raw_stick_val >  JOYSTICK_DEAD_BAND) stick_val_deadbanded = raw_stick_val - JOYSTICK_DEAD_BAND;
+    if (raw_stick_val < -JOYSTICK_DEAD_BAND) stick_val_deadbanded = raw_stick_val + JOYSTICK_DEAD_BAND;
+    alpha_beta (filtered_stick_val, stick_val_deadbanded * max_value /100 , ALPHA_STICK);
+}
+
 
 void  read_user_commands () 
-{   float stick_velocity_deadbanded;
-    stick_velocity_deadbanded = 0;
-    if (RemoteXY.joystick_1_y >  JOYSTICK_DEAD_BAND) stick_velocity_deadbanded = RemoteXY.joystick_1_y - JOYSTICK_DEAD_BAND;
-    if (RemoteXY.joystick_1_y < -JOYSTICK_DEAD_BAND) stick_velocity_deadbanded = RemoteXY.joystick_1_y + JOYSTICK_DEAD_BAND;
-
-    alpha_beta (filtered_stick_velocity, float(-stick_velocity_deadbanded) * MAX_VELOCITY_USR_MS /100 , ALPHA_STICK);
-    alpha_beta (filtered_stick_rotation, float( RemoteXY.joystick_1_x)/100, ALPHA_STICK);
-    if (filtered_stick_velocity > wanted_velocity_from_user_m_s)
-      {
-        max_allowed_acceleration = max_allowed_acceleration + MAX_JERK_MSSS * deltaT;
-        if (max_allowed_acceleration > MAX_ACCELERATION_MSS) max_allowed_acceleration = MAX_ACCELERATION_MSS;
-        wanted_velocity_from_user_m_s = min(wanted_velocity_from_user_m_s + max_allowed_acceleration * deltaT , filtered_stick_velocity);
-      }
-    if (filtered_stick_velocity < wanted_velocity_from_user_m_s)
-      {
-        max_allowed_acceleration = max_allowed_acceleration - MAX_JERK_MSSS * deltaT;
-        if (max_allowed_acceleration < MAX_ACCELERATION_MSS) max_allowed_acceleration = MAX_ACCELERATION_MSS;
-        wanted_velocity_from_user_m_s = max(wanted_velocity_from_user_m_s - max_allowed_acceleration * deltaT , filtered_stick_velocity);
-      }
-    wanted_rotation_from_user = 0;
-    if (filtered_stick_rotation >  JOYSTICK_DEAD_BAND) wanted_rotation_from_user = filtered_stick_rotation - JOYSTICK_DEAD_BAND;
-    if (filtered_stick_rotation < -JOYSTICK_DEAD_BAND) wanted_rotation_from_user = filtered_stick_rotation + JOYSTICK_DEAD_BAND;
+{
+    static float prev_wanted_velocity;
+    static float min_acceleration, max_acceleration;
+    static float min_velocity, max_velocity;
+    static float parabolic_extreme_velocity;
     
+    filter_deadband_stick (filtered_stick_velocity, -RemoteXY.joystick_1_y, MAX_VELOCITY_USR_MS);
+    filter_deadband_stick (filtered_stick_rotation,  RemoteXY.joystick_1_x, MAX_ROTATION_USR_MS);
+
+    max_acceleration = min(prev_wanted_acceleration + MAX_JERK_MSSS * deltaT , MAX_ACCELERATION_MSS);
+    min_acceleration = max(prev_wanted_acceleration - MAX_JERK_MSSS * deltaT ,-MAX_ACCELERATION_MSS);
+
+    if (filtered_stick_velocity > prev_wanted_velocity && prev_wanted_acceleration > MAX_JERK_MSSS* deltaT)
+    {
+      parabolic_extreme_velocity = prev_wanted_velocity + pow (prev_wanted_acceleration,2) /MAX_JERK_MSSS /2;
+      if ( parabolic_extreme_velocity >= filtered_stick_velocity) max_acceleration = prev_wanted_acceleration - MAX_JERK_MSSS* deltaT;
+    }
+    
+    if (filtered_stick_velocity<prev_wanted_velocity && prev_wanted_acceleration < -MAX_JERK_MSSS* deltaT)
+    {
+      parabolic_extreme_velocity = prev_wanted_velocity - pow (prev_wanted_acceleration,2) /MAX_JERK_MSSS /2;
+      if ( parabolic_extreme_velocity <= filtered_stick_velocity) min_acceleration = prev_wanted_acceleration + MAX_JERK_MSSS* deltaT;
+    }
+
+    max_velocity = min (prev_wanted_velocity + max_acceleration * deltaT , MAX_VELOCITY_USR_MS);
+    min_velocity = max (prev_wanted_velocity + min_acceleration * deltaT ,-MAX_VELOCITY_USR_MS);
+
+    wanted_velocity_from_user_m_s = filtered_stick_velocity;
+    constrainF (wanted_velocity_from_user_m_s , min_velocity , max_velocity);
+    
+    prev_wanted_acceleration = (wanted_velocity_from_user_m_s - prev_wanted_velocity) / deltaT;
+    prev_wanted_velocity = wanted_velocity_from_user_m_s;
+    
+    wanted_rotation_from_user = filtered_stick_rotation;
     if (abs(wanted_rotation_from_user) < SPEED_TO_STAND_MS)
       {
         if (abs(robot_orientation.yaw - started_rotation_angle) > 270) dizzy = true;
@@ -346,14 +401,12 @@ void  read_user_commands ()
     prev_SW1 = SW1; 
     SW1temp  = (1-digitalRead (PIN_SW1));
     filter_switch_transients (SW1temp, SW1 , 0);
-    if (!SW1 && prev_SW1) SW1_pressed= true;  
-    else SW1_pressed = false;
+    if (!SW1 && prev_SW1) SW1_pressed = true; else SW1_pressed = false;
 
     prev_SW2 = SW2; 
     SW2temp = (1-digitalRead (PIN_SW2));
     filter_switch_transients (SW2temp, SW2 , 1);
-    if (!SW2 && prev_SW2) SW2_pressed = true;  
-    else SW2_pressed = false;
+    if (!SW2 && prev_SW2) SW2_pressed = true; else SW2_pressed = false;
 
     prev_motion_enable = motion_enable;
     if (SW1_pressed) toggle (motion_enable);
@@ -364,7 +417,8 @@ void  read_user_commands ()
 
 
 void  reset_before_moving()
-{
+{   
+    gyro_Yaw_angle = 0;
     roboclaw.SetEncM1(ROBOCLAW_ADDRESS,0);
     roboclaw.SetEncM2(ROBOCLAW_ADDRESS,0);
     wanted_velocity_from_user_m_s = 0;
@@ -416,7 +470,7 @@ void get_pitch_and_vel ()
 { 
     robot_orientation = get_orientation();
     pitch_vel_rad_sec = robot_orientation.pitch_vel / RAD_TO_DEGs;
-    pitch_rad = (robot_orientation.pitch + IMU_PITCH_OFFSET) / RAD_TO_DEGs;
+    pitch_rad = (robot_orientation.pitch) / RAD_TO_DEGs;
     if (abs(pitch_rad) < MAX_PITCH_FOR_MOTION) 
       {
         pitch_out_of_range = false; 
@@ -455,6 +509,11 @@ void calc_pos_vel_errors()
 
 void read_robot_vel_pos()
 {
+    bool    valid1  , valid2  , valid3  , valid4  ;
+    uint8_t status1 , status2 , status3 , status4 ;
+    int32_t enc1    , enc2;
+    int32_t speed1  , speed2;
+    
     enc1 = roboclaw.ReadEncM1(ROBOCLAW_ADDRESS, &status1, &valid1);
     enc2 = roboclaw.ReadEncM2(ROBOCLAW_ADDRESS, &status2, &valid2);
     speed1 = roboclaw.ReadSpeedM1(ROBOCLAW_ADDRESS, &status3, &valid3);
@@ -465,12 +524,14 @@ void read_robot_vel_pos()
 }
 
 
-void send_motors_commands (float velocity ,float rotation )
+void send_motors_commands ()
 {
+    float velocity_Motor_1;
+    float velocity_Motor_2;
     if (motion_enable) 
       {
-        velocity_Motor_1 = (velocity - rotation) * CLICK_IN_METER;
-        velocity_Motor_2 = (velocity + rotation) * CLICK_IN_METER;
+        velocity_Motor_1 = (wanted_velocity_from_alg_m_s - wanted_rotation_from_user) * CLICK_IN_METER;
+        velocity_Motor_2 = (wanted_velocity_from_alg_m_s + wanted_rotation_from_user) * CLICK_IN_METER;
       }
     else
       {
@@ -484,39 +545,55 @@ void send_motors_commands (float velocity ,float rotation )
 
 orientation get_orientation() 
 {
+    static float AccX, AccY, AccZ;
     static float gyro_vel_m_sec;
-    float prev_gyro_vel_m_sec;
+    static float prev_gyro_vel_m_sec;
+    static float elapsedTime, previousTime;
+    static uint16_t acc_fail_counter;
+    float gyro_acc_X;
+    float gyro_acc_Z;
+    
     request_from_MPU (MPU6050_ACCEL_DATA, 6);
     AccX = (I2c.receive() << 8 | I2c.receive()) / 16384.0;        //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
     AccY = (I2c.receive() << 8 | I2c.receive()) / 16384.0; 
     AccZ = (I2c.receive() << 8 | I2c.receive()) / 16384.0;
 
     prev_gyro_vel_m_sec = gyro_vel_m_sec;
-    gyro_vel_m_sec = robot_vel_m_sec + GYRO_HEIGTH_M * gyro_Pitch_vel / RAD_TO_DEGs;
+    gyro_vel_m_sec = robot_vel_m_sec + GYRO_HEIGT_M * gyro_Pitch_vel / RAD_TO_DEGs;
     gyro_acc_m_ss  = (gyro_vel_m_sec - prev_gyro_vel_m_sec) / deltaT;
 
-    float gyro_acc_X = gyro_acc_m_ss / EARTH_GRAVITATION * cos(pitch_rad);
-    float gyro_acc_Z = gyro_acc_m_ss / EARTH_GRAVITATION * sin(pitch_rad);
+    gyro_acc_X = gyro_acc_m_ss / EARTH_GRAVITATION * cos(pitch_rad);
+    gyro_acc_Z = gyro_acc_m_ss / EARTH_GRAVITATION * sin(pitch_rad);
 
-    accAngleY = (atan( (gyro_acc_X - AccX) / sqrt(pow(AccY, 2) + pow((AccZ/1.05+gyro_acc_Z), 2))) * RAD_TO_DEGs) + 2.69;        // accel error y
+    accAngleY = (atan( (gyro_acc_X - AccX) / sqrt(pow(AccY, 2) + pow((AccZ/1.05+gyro_acc_Z), 2))) * RAD_TO_DEGs) + IMU_PITCH_OFFSET;        // accel error y
 
     elapsedTime  = (millis() - previousTime) / 1000;          // Divide by 1000 to get seconds
     previousTime =  millis();                                 // Current time actual time read
 
     request_from_MPU (MPU6050_GYRO_DATA+2, 4);
-    gyro_Pitch_vel = (I2c.receive() << 8 | I2c.receive()) / 131.0;
-    gyro_Yaw_vel   = (I2c.receive() << 8 | I2c.receive()) / 131.0;
+    gyro_Pitch_vel = (I2c.receive() << 8 | I2c.receive()) / 131.0 - gyro_Pitch_bias;
+    gyro_Yaw_vel   = (I2c.receive() << 8 | I2c.receive()) / 131.0 - gyro_Yaw_bias;
 
-    gyro_Pitch_vel = gyro_Pitch_vel - gyro_Pitch_bias; 
-    gyro_Yaw_vel   = gyro_Yaw_vel   - gyro_Yaw_bias;
-     
     gyro_Pitch_vel = gyro_Pitch_vel + MIX_YAW_PITCH * gyro_Yaw_vel;
 
-    gyro_Pitch_angle = gyro_Pitch_angle + gyro_Pitch_vel  * elapsedTime;
-    gyro_Yaw_angle   = gyro_Yaw_angle   + gyro_Yaw_vel    * elapsedTime;
+    if (abs(gyro_Pitch_vel)<100) gyro_Pitch_angle += gyro_Pitch_vel * elapsedTime;
+    if (abs(gyro_Yaw_vel  )<100) gyro_Yaw_angle   += gyro_Yaw_vel   * elapsedTime;
 
     if (first_run) gyro_Pitch_angle = accAngleY;
-    alpha_beta (gyro_Pitch_angle, accAngleY, ALPHA_GYRO_ACCEL);
+    if (abs(accAngleY - gyro_Pitch_angle) < VALID_ACC_ANGLE_DIFF) 
+      {
+        alpha_beta (gyro_Pitch_angle, accAngleY, ALPHA_GYRO_ACCEL);
+        if (acc_fail_counter > 0 && abs(accAngleY - gyro_Pitch_angle) < VALID_ACC_ANGLE_DIFF / 4) 
+          {
+            acc_fail_counter = 0;
+            acc_fail_events_counter ++;
+          }
+      }
+    else
+      {
+        if (acc_fail_counter > 10) alpha_beta (gyro_Pitch_angle, accAngleY, ALPHA_GYRO_ACCEL);
+        if (acc_fail_counter < 30) acc_fail_counter++;
+      }
    
     return {
       gyro_Yaw_angle,
@@ -535,8 +612,10 @@ void request_from_MPU (int register_start_address, int number_of_bytes)
 
 void calibrate_gyro_vel() 
 {
-    int32_t c = 0; 
-    int32_t num_reps = 1000;
+    int16_t c = 0; 
+    int16_t num_reps = 500;
+    gyro_Yaw_bias = 0;
+    gyro_Pitch_bias = 0;
     while (c < num_reps) 
       {
         request_from_MPU (MPU6050_GYRO_DATA+2, 4);
@@ -545,6 +624,7 @@ void calibrate_gyro_vel()
         gyro_Pitch_bias = gyro_Pitch_bias + (gyro_Pitch_vel / 131.0);
         gyro_Yaw_bias   = gyro_Yaw_bias   + (gyro_Yaw_vel   / 131.0);
         c++;
+        delay (15);
       }
     gyro_Pitch_bias = gyro_Pitch_bias / num_reps;
     gyro_Yaw_bias   = gyro_Yaw_bias   / num_reps;
@@ -552,6 +632,32 @@ void calibrate_gyro_vel()
     EEPROM.put(16, gyro_Yaw_bias);     delay(20);
 }
 
+void calibrate_gyro_yaw() 
+{
+    static int32_t last_call_time; 
+    static int16_t num_reps;
+    static int16_t c; 
+
+    if (millis() - last_call_time > 100)  // first call
+      {
+        c = 0;    
+        num_reps = 500;
+        gyro_Yaw_bias_temp = 0;
+      }
+    else
+      {
+        if (c < num_reps) gyro_Yaw_bias_temp += (gyro_Yaw_vel + gyro_Yaw_bias) ;
+        c++;
+      }
+    if (c == num_reps)
+      { 
+        gyro_Yaw_bias = gyro_Yaw_bias_temp / num_reps;
+        EEPROM.put(16, gyro_Yaw_bias); 
+        gyro_Yaw_angle = 0;
+        c ++;
+      }
+    last_call_time = millis();
+}
 
 void  toggle (bool &flag)
 {
@@ -609,7 +715,7 @@ void send_telemetry()
 //    Serial.print(" CT "); Serial.print(deltaT);
 //    Serial.print(" dd "); Serial.print(ddError);
 //    Serial.print(" int "); Serial.print(1000*integral);
-//    Serial.print(" wa "); Serial.print(57295*wanted_angle);
+//    Serial.print(" wa "); Serial.print(57295*wanted_pitch);
 //    Serial.print(" ac "); Serial.print(57295*pitch_rad);
 //    Serial.print(" avgdE "); Serial.print(1000*average_dError);
 //    Serial.print(" posEI "); Serial.print(1000*pos_error_integral);
