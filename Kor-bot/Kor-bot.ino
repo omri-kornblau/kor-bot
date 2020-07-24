@@ -15,7 +15,7 @@
 #define EARTH_GRAVITATION     9.8       // M/S2
 #define RAD_TO_DEGs           57.295
 #define GYRO_HEIGT_M          0.08      // m
-#define IMU_PITCH_OFFSET      3.7       //  deg   lower value = move forward / add -1*offset displayed in phone
+#define IMU_PITCH_OFFSET_DEF  5         // deg   lower value = move forward / add -1*offset displayed in phone
 #define VALID_ACC_ANGLE_DIFF  45        // if diff between the gyro angle and the acc angle is above this, the accelerometers are temporarily disabled
 #define MAX_JUMP_IN_PITCH     90        // max jump in pitch or yaw velocities in one cycle (to delete comm errors)
 
@@ -131,6 +131,9 @@ uint16_t acc_fail_events_counter;
 float gyro_Pitch_vel,   gyro_Yaw_vel;
 float gyro_Pitch_angle, gyro_Yaw_angle;
 float gyro_Pitch_bias,  gyro_Yaw_bias;
+float imu_pitch_offset, imu_pitch_offset_temp;
+float gyro_Yaw_bias_temp = 0;
+float gyro_Pitch_bias_temp = 0;
 float accAngleY;
 float wanted_pitch = 0, prev_wanted_pitch;
 float pitch_rad;
@@ -160,7 +163,6 @@ float wanted_velocity_from_user_m_s = 0;
 float wanted_rotation_from_user = 0;
 float filtered_stick_velocity = 0;
 float filtered_stick_rotation = 0;
-float gyro_Yaw_bias_temp = 0;
 float prev_wanted_acceleration;
 
 bool motion_enable = false;
@@ -179,6 +181,7 @@ bool dizzy = false;
 
 uint8_t RaspberryPi_index;
 uint8_t busy_cycle_time;
+uint8_t GUI_selector, prev_GUI_selector;
 
 void setup() 
 {
@@ -200,12 +203,16 @@ void setup()
     roboclaw.begin(115200);
     reset_gyro ();
 
-    if (CALIBRATE_GYRO) calibrate_gyro_vel();
+    if (CALIBRATE_GYRO) calibrate_gyro_setup();
     else 
       { 
-        EEPROM.get(10, gyro_Pitch_bias);   delay(20);
-        EEPROM.get(16, gyro_Yaw_bias);     delay(20);
+        EEPROM.get(10, gyro_Pitch_bias);   
+        EEPROM.get(16, gyro_Yaw_bias);     
       }
+    EEPROM.get(22, imu_pitch_offset);  
+    EEPROM.get(28, imu_pitch_offset_temp);
+    if (abs(imu_pitch_offset)>10 || imu_pitch_offset != imu_pitch_offset_temp || imu_pitch_offset ==0) imu_pitch_offset = IMU_PITCH_OFFSET_DEF;
+
     digitalWrite (PIN_LED2, 0);
 }
 
@@ -223,20 +230,14 @@ void loop()
     calc_PID_errors     ();
     calc_wanted_velocity();
     send_motors_commands();
-    if (other_cycle) 
-    {    
-      send_to_remoteXY    ();
-      RemoteXY_Handler    ();      // read from bluetooth 
-    }
-    else
-    { 
-      control_LEDs        ();
-      send_to_RaspberryPi ();
-      send_telemetry      ();
-    }
+    send_to_remoteXY    ();
+    RemoteXY_Handler    ();      // read from bluetooth 
+    control_LEDs        ();
+    send_to_RaspberryPi ();
+    send_telemetry      ();
     read_user_commands  ();
     
-    if (RemoteXY.select_1 == 5) calibrate_gyro_yaw(); 
+    if (prev_GUI_selector == 5) calibrate_gyro_online(); 
     first_run = false;
     toggle (other_cycle);
 }
@@ -250,7 +251,9 @@ void  reset_gyro ()
 
 void  send_to_remoteXY()
 { 
-  switch (RemoteXY.select_1)
+  prev_GUI_selector = GUI_selector;
+  GUI_selector = RemoteXY.select_1;
+  switch (GUI_selector)
     {
       case 0:  // actual pitch vs wanted pitch    
         RemoteXY.onlineGraph_1_var1 = wanted_pitch * RAD_TO_DEGs;
@@ -564,7 +567,7 @@ orientation get_orientation()
     gyro_acc_X = gyro_acc_m_ss / EARTH_GRAVITATION * cos(pitch_rad);
     gyro_acc_Z = gyro_acc_m_ss / EARTH_GRAVITATION * sin(pitch_rad);
 
-    accAngleY = (atan( (gyro_acc_X - AccX) / sqrt(pow(AccY, 2) + pow((AccZ/1.05+gyro_acc_Z), 2))) * RAD_TO_DEGs) + IMU_PITCH_OFFSET;        // accel error y
+    accAngleY = (atan( (gyro_acc_X - AccX) / sqrt(pow(AccY, 2) + pow((AccZ/1.05+gyro_acc_Z), 2))) * RAD_TO_DEGs) + imu_pitch_offset;        // accel error y
 
     elapsedTime  = (millis() - previousTime) / 1000;          // Divide by 1000 to get seconds
     previousTime =  millis();                                 // Current time actual time read
@@ -612,7 +615,7 @@ void request_from_MPU (int register_start_address, int number_of_bytes)
 }
 
 
-void calibrate_gyro_vel() 
+void calibrate_gyro_setup() 
 {
     int16_t c = 0; 
     int16_t num_reps = 500;
@@ -634,29 +637,36 @@ void calibrate_gyro_vel()
     EEPROM.put(16, gyro_Yaw_bias);     delay(20);
 }
 
-void calibrate_gyro_yaw() 
+void calibrate_gyro_online() 
 {
     static int32_t last_call_time; 
-    static int16_t num_reps;
     static int16_t c; 
-
     if (millis() - last_call_time > 100)  // first call
       {
         c = 0;    
-        num_reps = 500;
         gyro_Yaw_bias_temp = 0;
+        gyro_Pitch_bias_temp = 0;
+        imu_pitch_offset_temp = 0;
       }
-    else
+    if(GUI_selector ==5)    // still calibrating
       {
-        if (c < num_reps) gyro_Yaw_bias_temp += (gyro_Yaw_vel + gyro_Yaw_bias) ;
+        gyro_Yaw_bias_temp    += (gyro_Yaw_vel + gyro_Yaw_bias   );
+        gyro_Pitch_bias_temp  += (gyro_Pitch_vel + gyro_Pitch_bias   );
+        imu_pitch_offset_temp += (accAngleY - imu_pitch_offset);
         c++;
       }
-    if (c == num_reps)
+    else if (c > 50)    // calib ended and had at least 50 cycles
       { 
-        gyro_Yaw_bias = gyro_Yaw_bias_temp / num_reps;
+        gyro_Yaw_bias = gyro_Yaw_bias_temp / c;
         EEPROM.put(16, gyro_Yaw_bias); 
+        gyro_Pitch_bias = gyro_Pitch_bias_temp / c;
+        EEPROM.put(10, gyro_Pitch_bias); 
         gyro_Yaw_angle = 0;
-        c ++;
+
+        imu_pitch_offset = -1* imu_pitch_offset_temp / c;
+        EEPROM.put(22, imu_pitch_offset); 
+        EEPROM.put(28, imu_pitch_offset); 
+        c = 0;
       }
     last_call_time = millis();
 }
