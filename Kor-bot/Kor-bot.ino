@@ -40,7 +40,7 @@
 
 #define ALPHA_AVG_dERROR      0.9       //  0.9 avergaring factor for the averaged derivative of the error 
 #define ALPHA_AVG_VEL_ERR     0.9       //  0.9 avergaring factor for the averaged velocity error
-#define ALPHA_YAW_AVERAGE     0.9       //  0.9 
+#define ALPHA_YAW_AVERAGE     0.95       //  0.9 
 #define ALPHA_AVG_VELOCITY    0.9       //  0.9 avergaring factor for the averaged velocity 
 
 #define JOYSTICK_DEAD_BAND    10        // % of joystick range 
@@ -696,8 +696,8 @@ void  send_to_RaspberryPi ()
     alpha_beta (average_yaw , robot_orientation.yaw , ALPHA_YAW_AVERAGE);
     if (abs(RemoteXY.joystick_1_x) > abs(avg_stick_x)) alpha_beta (avg_stick_x, RemoteXY.joystick_1_x, ALPHA_YAW_AVERAGE);
     else avg_stick_x = RemoteXY.joystick_1_x;
-    eyes_pitch = 573*pitch_rad+128;
-    eyes_yaw = (robot_orientation.yaw - average_yaw)*6 + (RemoteXY.joystick_1_x - avg_stick_x )*10 + 128;
+    eyes_pitch = 1500*pitch_rad+128;
+    eyes_yaw = (robot_orientation.yaw - average_yaw)*15 + (RemoteXY.joystick_1_x - avg_stick_x )*60 + 128;
     
     if (RaspberryPi_index == 0)
         Serial3.write(0xff);
