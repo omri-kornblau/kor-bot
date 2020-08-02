@@ -157,7 +157,7 @@ float pos_error , prev_pos_error, pos_error_integral;
 float vel_error , vel_error_integral;
 float averaged_vel_error;
 float deltaT = 0.01;
-float started_rotation_angle;
+float accumulated_rotation_angle;
 float wanted_position = 0;
 float wanted_velocity_from_user_m_s = 0;
 float wanted_rotation_from_user = 0;
@@ -367,6 +367,7 @@ void  read_user_commands ()
     static float min_acceleration, max_acceleration;
     static float min_velocity, max_velocity;
     static float parabolic_extreme_velocity;
+    static float prev_robot_orientation;
     
     filter_deadband_stick (filtered_stick_velocity, -RemoteXY.joystick_1_y, MAX_VELOCITY_USR_MS);
     filter_deadband_stick (filtered_stick_rotation,  RemoteXY.joystick_1_x, MAX_ROTATION_USR_MS);
@@ -396,10 +397,13 @@ void  read_user_commands ()
     prev_wanted_velocity = wanted_velocity_from_user_m_s;
     
     wanted_rotation_from_user = filtered_stick_rotation;
+
+    accumulated_rotation_angle += robot_orientation.yaw - prev_robot_orientation;
+    prev_robot_orientation = robot_orientation.yaw;
     if (abs(wanted_rotation_from_user) < SPEED_TO_STAND_MS)
       {
-        if (abs(robot_orientation.yaw - started_rotation_angle) > 270) dizzy = true;
-        started_rotation_angle = robot_orientation.yaw;
+        if (abs(accumulated_rotation_angle) > 320) dizzy = true;
+        accumulated_rotation_angle = 0;
       }
 
     prev_SW1 = SW1; 
@@ -692,13 +696,28 @@ void alpha_beta (float &average,float value,float ALPHA)
 
 void  send_to_RaspberryPi ()
 {
-    static float average_yaw , avg_stick_x, eyes_pitch, eyes_yaw;
+    static float average_yaw , avg_stick_x, eyes_pitch, eyes_yaw, dizzy_amplitude, dizzy_phase;
+    static int dizzy_count;
+    
     alpha_beta (average_yaw , robot_orientation.yaw , ALPHA_YAW_AVERAGE);
     if (abs(RemoteXY.joystick_1_x) > abs(avg_stick_x)) alpha_beta (avg_stick_x, RemoteXY.joystick_1_x, ALPHA_YAW_AVERAGE);
     else avg_stick_x = RemoteXY.joystick_1_x;
     eyes_pitch = 1500*pitch_rad+128;
     eyes_yaw = (robot_orientation.yaw - average_yaw)*15 + (RemoteXY.joystick_1_x - avg_stick_x )*60 + 128;
-    
+
+    if (dizzy) 
+      {
+        dizzy_amplitude = (600-float(dizzy_count))/5;
+        dizzy_phase  = float(dizzy_count)/20;
+        eyes_yaw   += dizzy_amplitude *cos (dizzy_phase);
+        eyes_pitch += dizzy_amplitude *sin (dizzy_phase);
+        dizzy_count ++;
+        if (dizzy_count >600)
+          {
+            dizzy = false;
+            dizzy_count = 0;
+          }
+      }
     if (RaspberryPi_index == 0)
         Serial3.write(0xff);
         Serial3.write(0xff);
@@ -707,8 +726,7 @@ void  send_to_RaspberryPi ()
         Serial3.write(byte(constrain (int (eyes_yaw  ),0,254) ));     // sends high byte of yaw in 0.1 deg
     if (RaspberryPi_index == 2)
         Serial3.write(byte(constrain (int (50*robot_vel_m_sec + 128),0,254) ));        // send vel in 2cm/sec
-        Serial3.write(byte( dizzy));  
-        if (dizzy) dizzy = false; 
+        Serial3.write(byte( 0));  // reserved for dizzy  use for expression 
     RaspberryPi_index += 1;
     if (RaspberryPi_index == 3) RaspberryPi_index = 0;
 }
