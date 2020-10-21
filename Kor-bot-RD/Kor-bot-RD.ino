@@ -78,15 +78,10 @@
 // RemoteXY configurate  
 #pragma pack(push, 1)
 uint8_t RemoteXY_CONF[] =
-  { 255,4,0,9,0,76,0,10,24,1,
-  5,32,10,47,44,44,190,26,31,68,
-  2,0,0,63,25,186,50,137,1,0,
-  51,88,12,12,191,190,0,65,2,50,
-  41,13,13,3,134,8,26,47,9,191,
-  26,129,0,9,35,41,4,192,87,65,
-  32,32,71,65,32,32,32,67,70,32,
-  32,72,89,32,32,86,65,32,32,32,
-  67,71,0 };
+  { 255,3,0,1,0,27,0,10,24,1,
+  5,32,10,47,44,44,190,26,31,1,
+  0,48,5,12,12,191,190,0,65,2,
+  3,4,13,13 };
   
 // this structure defines all the variables and events of your control interface 
 struct {
@@ -95,11 +90,8 @@ struct {
   int8_t joystick_1_x; // =-100..100 x-coordinate joystick position 
   int8_t joystick_1_y; // =-100..100 y-coordinate joystick position 
   uint8_t button_1; // =1 if button pressed, else =0 
-  uint8_t select_1; // =0 if select position A, =1 if position B, =2 if position C, ... 
 
     // output variables
-  float onlineGraph_1_var1;
-  float onlineGraph_1_var2;
   uint8_t led_1_g; // =0..255 LED Green brightness 
 
     // other variable
@@ -111,6 +103,7 @@ struct {
 /////////////////////////////////////////////
 //           END RemoteXY include          //
 /////////////////////////////////////////////
+
 
 RoboClaw roboclaw(&Serial1,10000);
 
@@ -252,42 +245,42 @@ void  reset_gyro ()
 void  send_to_remoteXY()
 { 
   prev_GUI_selector = GUI_selector;
-  GUI_selector = RemoteXY.select_1;
-  switch (GUI_selector)
-    {
-      case 0:  // actual pitch vs wanted pitch    
-        RemoteXY.onlineGraph_1_var1 = wanted_pitch * RAD_TO_DEGs;
-        RemoteXY.onlineGraph_1_var2 = pitch_rad    * RAD_TO_DEGs;
-        break;
-  
-      case 1:  // accelerometer based pitch vs gyro pitch
-        RemoteXY.onlineGraph_1_var1 = accAngleY;
-        RemoteXY.onlineGraph_1_var2 = pitch_rad    * RAD_TO_DEGs;
-        break;
-  
-      case 2:  // busy time in cycle and accelerometer failures counter
-        RemoteXY.onlineGraph_1_var1 = acc_fail_events_counter;
-        RemoteXY.onlineGraph_1_var2 = busy_cycle_time;
-        break;
-  
-      case 3:  // wanted heading vs yaw
-        RemoteXY.onlineGraph_1_var1 = robot_orientation.yaw;
-        RemoteXY.onlineGraph_1_var2 = 0;
-        break;
-
-      case 4:  // wanted heading vs yaw
-        RemoteXY.onlineGraph_1_var1 = wanted_velocity_from_user_m_s;
-        RemoteXY.onlineGraph_1_var2 = prev_wanted_acceleration;
-        break;
-
-      case 5:  // wanted heading vs yaw
-        RemoteXY.onlineGraph_1_var1 = robot_orientation.yaw;
-        RemoteXY.onlineGraph_1_var2 = gyro_Yaw_bias_temp;
-        break;
-  
-      default:
-        break;
-    }
+//  GUI_selector = RemoteXY.select_1;
+//  switch (GUI_selector)
+//    {
+//      case 0:  // actual pitch vs wanted pitch    
+//        RemoteXY.onlineGraph_1_var1 = wanted_pitch * RAD_TO_DEGs;
+//        RemoteXY.onlineGraph_1_var2 = pitch_rad    * RAD_TO_DEGs;
+//        break;
+//  
+//      case 1:  // accelerometer based pitch vs gyro pitch
+//        RemoteXY.onlineGraph_1_var1 = accAngleY;
+//        RemoteXY.onlineGraph_1_var2 = pitch_rad    * RAD_TO_DEGs;
+//        break;
+//  
+//      case 2:  // busy time in cycle and accelerometer failures counter
+//        RemoteXY.onlineGraph_1_var1 = acc_fail_events_counter;
+//        RemoteXY.onlineGraph_1_var2 = busy_cycle_time;
+//        break;
+//  
+//      case 3:  // wanted heading vs yaw
+//        RemoteXY.onlineGraph_1_var1 = robot_orientation.yaw;
+//        RemoteXY.onlineGraph_1_var2 = 0;
+//        break;
+//
+//      case 4:  // wanted heading vs yaw
+//        RemoteXY.onlineGraph_1_var1 = wanted_velocity_from_user_m_s;
+//        RemoteXY.onlineGraph_1_var2 = prev_wanted_acceleration;
+//        break;
+//
+//      case 5:  // wanted heading vs yaw
+//        RemoteXY.onlineGraph_1_var1 = robot_orientation.yaw;
+//        RemoteXY.onlineGraph_1_var2 = gyro_Yaw_bias_temp;
+//        break;
+//  
+//      default:
+//        break;
+//    }
   if (motion_enable) RemoteXY.led_1_g = 255; else RemoteXY.led_1_g = 0;
 }
 
@@ -368,10 +361,28 @@ void  read_user_commands ()
     static float min_velocity, max_velocity;
     static float parabolic_extreme_velocity;
     static float prev_robot_orientation;
-    
-    filter_deadband_stick (filtered_stick_velocity, -RemoteXY.joystick_1_y, MAX_VELOCITY_USR_MS);
-    filter_deadband_stick (filtered_stick_rotation,  RemoteXY.joystick_1_x, MAX_ROTATION_USR_MS);
 
+    static float prev_joystick_X, prev_joystick_Y;
+    static long last_movement;
+    static boolean com_loss;
+    
+     //  stop if dead commands
+    if (RemoteXY.joystick_1_y != prev_joystick_Y || RemoteXY.joystick_1_x != prev_joystick_X) last_movement= millis();
+    prev_joystick_X = RemoteXY.joystick_1_x;
+    prev_joystick_Y = RemoteXY.joystick_1_y;
+
+    if (millis() - last_movement > 100) com_loss = true;  else com_loss = false;
+
+    if (!com_loss)
+        {
+         filter_deadband_stick (filtered_stick_velocity, -RemoteXY.joystick_1_y, MAX_VELOCITY_USR_MS);
+         filter_deadband_stick (filtered_stick_rotation,  RemoteXY.joystick_1_x, MAX_ROTATION_USR_MS);
+        }
+    else
+        {
+         filter_deadband_stick (filtered_stick_velocity, 0, MAX_VELOCITY_USR_MS);
+         filter_deadband_stick (filtered_stick_rotation,  0, MAX_ROTATION_USR_MS);
+        }
     max_acceleration = min(prev_wanted_acceleration + MAX_JERK_USR_MSSS * deltaT , MAX_ACCEL_USR_MSS);
     min_acceleration = max(prev_wanted_acceleration - MAX_JERK_USR_MSSS * deltaT ,-MAX_ACCEL_USR_MSS);
 
