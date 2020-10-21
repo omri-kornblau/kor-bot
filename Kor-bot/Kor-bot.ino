@@ -52,8 +52,8 @@
 #define MAX_JERK_USR_MSSS     4.0
 #define MAX_ACCEL_USR_MSS     2.0       //  max acceleration that the user can request 
 #define MAX_VELOCITY_ALG_MS   3.0       //  max velocity that the algorithms will send to the motors
-#define MAX_VELOCITY_USR_MS   1.0       // was 1.5 max velocity that the user can request
-#define MAX_ROTATION_USR_MS   0.6       // was 1
+#define MAX_VELOCITY_USR_MS   1.2       // was 1.5 max velocity that the user can request
+#define MAX_ROTATION_USR_MS   0.8       // was 1
 #define MAX_PITCH_FOR_MOTION  0.6       //  disable motion above this angle
 
 #define PIN_SW1   3
@@ -368,10 +368,29 @@ void  read_user_commands ()
     static float min_velocity, max_velocity;
     static float parabolic_extreme_velocity;
     static float prev_robot_orientation;
-    
-    filter_deadband_stick (filtered_stick_velocity, -RemoteXY.joystick_1_y, MAX_VELOCITY_USR_MS);
-    filter_deadband_stick (filtered_stick_rotation,  RemoteXY.joystick_1_x, MAX_ROTATION_USR_MS);
 
+    static float prev_joystick_X, prev_joystick_Y;
+    static long last_movement;
+    static boolean com_loss;
+
+     //  stop if dead commands
+    if (RemoteXY.joystick_1_y != prev_joystick_Y || RemoteXY.joystick_1_x != prev_joystick_X) last_movement= millis();
+    prev_joystick_X = RemoteXY.joystick_1_x;
+    prev_joystick_Y = RemoteXY.joystick_1_y;
+
+    if (millis() - last_movement > 100) com_loss = true;  else com_loss = false;
+
+    if (!com_loss)
+        {
+         filter_deadband_stick (filtered_stick_velocity, -RemoteXY.joystick_1_y, MAX_VELOCITY_USR_MS);
+         filter_deadband_stick (filtered_stick_rotation,  RemoteXY.joystick_1_x, MAX_ROTATION_USR_MS);
+        }
+    else
+        {
+         filter_deadband_stick (filtered_stick_velocity, 0, MAX_VELOCITY_USR_MS);
+         filter_deadband_stick (filtered_stick_rotation,  0, MAX_ROTATION_USR_MS);
+        }
+    
     max_acceleration = min(prev_wanted_acceleration + MAX_JERK_USR_MSSS * deltaT , MAX_ACCEL_USR_MSS);
     min_acceleration = max(prev_wanted_acceleration - MAX_JERK_USR_MSSS * deltaT ,-MAX_ACCEL_USR_MSS);
 
